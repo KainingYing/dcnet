@@ -7,7 +7,7 @@ import torch
 import torch.distributed as dist
 from mmcv.runner import BaseModule, auto_fp16
 
-from mmdet.core.visualization import imshow_det_bboxes
+from mmhoidet.core.visualization import imshow_det_interactions
 
 
 class BaseHoiDetector(BaseModule, metaclass=ABCMeta):
@@ -68,7 +68,7 @@ class BaseHoiDetector(BaseModule, metaclass=ABCMeta):
                 has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
                 For details on the values of these keys, see
-                :class:`mmdet.datasets.pipelines.Collect`.
+                :class:`mmhoidet.datasets.pipelines.Collect`.
             kwargs (keyword arguments): Specific to concrete implementation.
         """
         # NOTE the batched image size information may be useful, e.g.

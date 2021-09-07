@@ -13,7 +13,7 @@ from .builder import DATASETS, PIPELINES
 from .coco import CocoDataset
 
 
-@DATASETS.register_module()
+@DATASETS.register_module(force=True)
 class ConcatDataset(_ConcatDataset):
     """A wrapper of concatenated dataset.
 
@@ -127,7 +127,7 @@ class ConcatDataset(_ConcatDataset):
             return eval_results
 
 
-@DATASETS.register_module()
+@DATASETS.register_module(force=True)
 class RepeatDataset:
     """A wrapper of repeated dataset.
 
@@ -171,7 +171,7 @@ class RepeatDataset:
 
 
 # Modified from https://github.com/facebookresearch/detectron2/blob/41d475b75a230221e21d9cac5d69655e3415e3a4/detectron2/data/samplers/distributed_sampler.py#L57 # noqa
-@DATASETS.register_module()
+@DATASETS.register_module(force=True)
 class ClassBalancedDataset:
     """A wrapper of repeated dataset with repeat factor.
 
@@ -285,7 +285,7 @@ class ClassBalancedDataset:
         return len(self.repeat_indices)
 
 
-@DATASETS.register_module()
+@DATASETS.register_module(force=True)
 class MultiImageMixDataset:
     """A wrapper of multiple images mixed dataset.
 

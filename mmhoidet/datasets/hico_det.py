@@ -8,12 +8,12 @@ from mmcv.utils import print_log
 from terminaltables import AsciiTable
 from torch.utils.data import Dataset
 
-from mmdet.core import eval_map, eval_recalls
+from mmhoidet.core import eval_map, eval_recalls
 from .builder import DATASETS
 from .pipelines import Compose
 
 
-@DATASETS.register_module()
+@DATASETS.register_module(force=True)
 class HICODet(Dataset):
     OBJ_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                    'train', 'truck', 'boat', 'traffic light', 'fire hydrant',

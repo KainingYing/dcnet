@@ -10,7 +10,51 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=False),
         norm_eval=True,
         style='pytorch',
-        init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50'))
+        init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50')),
+    hoi_head=dict(
+        type='QPICHead',
+        num_obj_classes=80,
+        num_verb_classes=80,
+        in_channels=2048,
+        num_query=100,
+        num_reg_cls=2,
+        sync_cls_avg_factor=False,
+        transformer=dict(
+            type='Transformer',
+            encoder=dict(
+                type='DetrTransformerEncoder',
+                num_layers=6,
+                transformerlayers=dict(
+                    type='BaseTransformerLayer',
+                    attn_cfgs=[
+                        dict(
+                            type='MultiheadAttention',
+                            embed_dims=256,
+                            num_heads=8,
+                            dropout=0.1)
+                    ],
+                    feedforward_channels=2048,
+                    ffn_dropout=0.1,
+                    operation_order=('self_attn', 'norm', 'ffn', 'norm'))),
+            decoder=dict(
+                type='DetrTransformerDecoder',
+                return_intermediate=True,
+                num_layers=6,
+                transformerlayers=dict(
+                    type='DetrTransformerDecoderLayer',
+                    attn_cfgs=dict(
+                        type='MultiheadAttention',
+                        embed_dims=256,
+                        num_heads=8,
+                        dropout=0.1),
+                    feedforward_channels=2048,
+                    ffn_dropout=0.1,
+                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
+                                     'ffn', 'norm')),
+            )),
+        positional_encoding=dict(
+            type='SinePositionalEncoding', num_feats=128, normalize=True)
+    )
 )
 
 # dataset settings

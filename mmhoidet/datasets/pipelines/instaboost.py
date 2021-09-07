@@ -4,7 +4,7 @@ import numpy as np
 from ..builder import PIPELINES
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class InstaBoost:
     r"""Data augmentation method in `InstaBoost: Boosting Instance
     Segmentation Via Probability Map Guided Copy-Pasting

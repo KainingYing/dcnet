@@ -7,7 +7,7 @@ from ..builder import DETECTORS, build_backbone, build_head
 from .basehoidetector import BaseHoiDetector
 
 
-@DETECTORS.register_module()
+@DETECTORS.register_module(force=True)
 class QPIC(BaseHoiDetector):
     """reimplement of CVPR 2021 QPIC
     https://arxiv.org/abs/2103.05399"""

@@ -9,12 +9,12 @@ from mmcv.utils import print_log
 from terminaltables import AsciiTable
 from torch.utils.data import Dataset
 
-from mmdet.core import eval_map, eval_recalls
+from mmhoidet.core import eval_map, eval_recalls
 from .builder import DATASETS
 from .pipelines import Compose
 
 
-@DATASETS.register_module()
+@DATASETS.register_module(force=True)
 class CustomDataset(Dataset):
     """Custom dataset for detection.
 

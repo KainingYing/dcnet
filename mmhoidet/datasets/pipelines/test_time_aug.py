@@ -7,7 +7,7 @@ from ..builder import PIPELINES
 from .compose import Compose
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class MultiScaleFlipAug:
     """Test-time augmentation with multiple scales and flipping.
 

@@ -4,13 +4,13 @@ import torch.nn.functional as F
 from mmcv.cnn import Conv2d, Linear, build_activation_layer
 from mmcv.cnn.bricks.transformer import FFN, build_positional_encoding
 from mmcv.runner import force_fp32
-
-from mmdet.core import (bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh,
-                        build_assigner, build_sampler, multi_apply,
-                        reduce_mean)
-from mmdet.models.utils import build_transformer
-from ..builder import HEADS, build_loss
 from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
+
+from mmhoidet.core import (bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh,
+                           build_assigner, build_sampler, multi_apply,
+                           reduce_mean)
+from mmhoidet.models.utils import build_transformer
+from ..builder import HEADS, build_loss
 
 
 @HEADS.register_module()
@@ -49,10 +49,25 @@ class QPICHead(AnchorFreeHead):
                  **kwargs
                  ):
         super(AnchorFreeHead, self).__init__(init_cfg)
+
+        self.num_query = num_query
+        self.in_channels = in_channels
+        self.num_reg_fcs = num_reg_fcs
+        self.train_cfg = train_cfg
+        self.test_cfg = test_cfg
+        self.fp16_enabled = False
         self.num_obj_classes = num_obj_classes
         self.num_verb_classes = num_verb_classes
-        self.num_query = num_query
 
+        self.positional_encoding = build_positional_encoding(
+            positional_encoding)
+        self.transformer = build_transformer(transformer)
+        self.embed_dims = self.transformer.embed_dims
+        assert 'num_feats' in positional_encoding
+        num_feats = positional_encoding['num_feats']
+        assert num_feats * 2 == self.embed_dims, 'embed_dims should' \
+                                                 f' be exactly 2 times of num_feats. Found {self.embed_dims}' \
+                                                 f' and {num_feats}.'
         self._init_layers()
 
     def _init_layers(self):
@@ -114,6 +129,38 @@ class QPICHead(AnchorFreeHead):
               self)._load_from_state_dict(state_dict, prefix, local_metadata,
                                           strict, missing_keys,
                                           unexpected_keys, error_msgs)
+
+    def forward_train(self,
+                      x,
+                      img_metas,
+                      gt_sub_bboxes,
+                      gt_obj_bboxes,
+                      gt_obj_labels,
+                      gt_verb_labels,
+                      **kwargs):
+        """
+        Args:
+            x (list[Tensor]): Features from FPN.
+            img_metas (list[dict]): Meta information of each image, e.g.,
+                image size, scaling factor, etc.
+            gt_bboxes (Tensor): Ground truth bboxes of the image,
+                shape (num_gts, 4).
+            gt_labels (Tensor): Ground truth labels of each box,
+                shape (num_gts,).
+            gt_bboxes_ignore (Tensor): Ground truth bboxes to be
+                ignored, shape (num_ignored_gts, 4).
+            proposal_cfg (mmcv.Config): Test / postprocessing configuration,
+                if None, test_cfg would be used
+
+        Returns:
+            tuple:
+                losses: (dict[str, Tensor]): A dictionary of loss components.
+                proposal_list (list[Tensor]): Proposals of each image.
+        """
+        outs = self(x)  # forward
+
+        loss_inputs = outs + (gt_sub_bboxes, gt_obj_bboxes, gt_obj_labels, gt_verb_labels, img_metas)
+        return self.loss(*loss_inputs)
 
     def forward(self, feats, img_metas):
         """Forward function.
@@ -292,7 +339,7 @@ class QPICHead(AnchorFreeHead):
         cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
-            num_total_neg * self.bg_cls_weight
+                         num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))
@@ -312,7 +359,7 @@ class QPICHead(AnchorFreeHead):
             img_h, img_w, _ = img_meta['img_shape']
             factor = bbox_pred.new_tensor([img_w, img_h, img_w,
                                            img_h]).unsqueeze(0).repeat(
-                                               bbox_pred.size(0), 1)
+                bbox_pred.size(0), 1)
             factors.append(factor)
         factors = torch.cat(factors, 0)
 
@@ -382,8 +429,8 @@ class QPICHead(AnchorFreeHead):
 
         (labels_list, label_weights_list, bbox_targets_list,
          bbox_weights_list, pos_inds_list, neg_inds_list) = multi_apply(
-             self._get_target_single, cls_scores_list, bbox_preds_list,
-             gt_bboxes_list, gt_labels_list, img_metas, gt_bboxes_ignore_list)
+            self._get_target_single, cls_scores_list, bbox_preds_list,
+            gt_bboxes_list, gt_labels_list, img_metas, gt_bboxes_ignore_list)
         num_total_pos = sum((inds.numel() for inds in pos_inds_list))
         num_total_neg = sum((inds.numel() for inds in neg_inds_list))
         return (labels_list, label_weights_list, bbox_targets_list,
@@ -436,7 +483,7 @@ class QPICHead(AnchorFreeHead):
         neg_inds = sampling_result.neg_inds
 
         # label targets
-        labels = gt_bboxes.new_full((num_bboxes, ),
+        labels = gt_bboxes.new_full((num_bboxes,),
                                     self.num_classes,
                                     dtype=torch.long)
         labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
@@ -494,10 +541,3 @@ class QPICHead(AnchorFreeHead):
             loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
         return losses
-
-
-
-
-
-
-

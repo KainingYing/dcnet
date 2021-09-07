@@ -5,7 +5,7 @@ import mmcv
 import numpy as np
 import pycocotools.mask as maskUtils
 
-from mmdet.core import BitmapMasks, PolygonMasks
+from mmhoidet.core import BitmapMasks, PolygonMasks
 from ..builder import PIPELINES
 
 try:
@@ -14,7 +14,7 @@ except ImportError:
     rgb2id = None
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class LoadImageFromFile:
     """Load an image from file.
 
@@ -47,7 +47,7 @@ class LoadImageFromFile:
         """Call functions to load image and get image meta information.
 
         Args:
-            results (dict): Result dict from :obj:`mmdet.CustomDataset`.
+            results (dict): Result dict from :obj:`mmhoidet.CustomDataset`.
 
         Returns:
             dict: The dict contains loaded image and meta information.
@@ -83,7 +83,7 @@ class LoadImageFromFile:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class LoadImageFromWebcam(LoadImageFromFile):
     """Load an image from webcam.
 
@@ -115,7 +115,7 @@ class LoadImageFromWebcam(LoadImageFromFile):
         return results
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class LoadHoiAnnotations:
     """Load multiple types of annotations.
 
@@ -182,7 +182,7 @@ class LoadHoiAnnotations:
         """Call function to load multiple types annotations.
 
         Args:
-            results (dict): Result dict from :obj:`mmdet.CustomDataset`.
+            results (dict): Result dict from :obj:`mmhoidet.CustomDataset`.
 
         Returns:
             dict: The dict contains loaded bounding box, label, mask and
@@ -213,7 +213,7 @@ class LoadHoiAnnotations:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class FilterAnnotations:
     """Filter invalid annotations.
 

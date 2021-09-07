@@ -34,7 +34,7 @@ def to_tensor(data):
         raise TypeError(f'type {type(data)} cannot be converted to tensor.')
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class ToTensor:
     """Convert some results to :obj:`torch.Tensor` by given keys.
 
@@ -63,7 +63,7 @@ class ToTensor:
         return self.__class__.__name__ + f'(keys={self.keys})'
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class ImageToTensor:
     """Convert image to :obj:`torch.Tensor` by given keys.
 
@@ -100,7 +100,7 @@ class ImageToTensor:
         return self.__class__.__name__ + f'(keys={self.keys})'
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Transpose:
     """Transpose some results by given keys.
 
@@ -132,7 +132,7 @@ class Transpose:
             f'(keys={self.keys}, order={self.order})'
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class ToDataContainer:
     """Convert results to :obj:`mmcv.DataContainer` by given fields.
 
@@ -171,7 +171,7 @@ class ToDataContainer:
         return self.__class__.__name__ + f'(fields={self.fields})'
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class DefaultFormatBundle:
     """Default formatting bundle.
 
@@ -248,7 +248,7 @@ class DefaultFormatBundle:
         return self.__class__.__name__
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Collect:
     """Collect data from the loader relevant to the specific task.
 
@@ -324,7 +324,7 @@ class Collect:
             f'(keys={self.keys}, meta_keys={self.meta_keys})'
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class WrapFieldsToLists:
     """Wrap fields of the data dictionary into lists for evaluation.
 

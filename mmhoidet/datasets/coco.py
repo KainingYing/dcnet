@@ -11,13 +11,13 @@ import numpy as np
 from mmcv.utils import print_log
 from terminaltables import AsciiTable
 
-from mmdet.core import eval_recalls
+from mmhoidet.core import eval_recalls
 from .api_wrappers import COCO, COCOeval
 from .builder import DATASETS
 from .custom import CustomDataset
 
 
-@DATASETS.register_module()
+@DATASETS.register_module(force=True)
 class CocoDataset(CustomDataset):
 
     CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',

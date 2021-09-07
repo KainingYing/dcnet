@@ -8,8 +8,8 @@ import mmcv
 import numpy as np
 from numpy import random
 
-from mmdet.core import PolygonMasks
-from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
+from mmhoidet.core import PolygonMasks
+from mmhoidet.core.evaluation.bbox_overlaps import bbox_overlaps
 from ..builder import PIPELINES
 
 try:
@@ -25,7 +25,7 @@ except ImportError:
     Compose = None
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Resize:
     """Resize images & subject/object bbox.
 
@@ -288,7 +288,7 @@ class Resize:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class RandomFlip:
     """Flip the image & subject/object bbox.
 
@@ -436,7 +436,7 @@ class RandomFlip:
         return self.__class__.__name__ + f'(flip_ratio={self.flip_ratio})'
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class RandomShift:
     """Shift the image and box given shift pixels and probability.
 
@@ -526,9 +526,9 @@ class RandomShift:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Pad:
-    """Pad the image & mask.
+    """Pad the image.
 
     There are two padding modes: (1) pad to a fixed size and (2) pad to the
     minimum size that is divisible by some number.
@@ -578,21 +578,8 @@ class Pad:
         results['pad_fixed_size'] = self.size
         results['pad_size_divisor'] = self.size_divisor
 
-    def _pad_masks(self, results):
-        """Pad masks according to ``results['pad_shape']``."""
-        pad_shape = results['pad_shape'][:2]
-        for key in results.get('mask_fields', []):
-            results[key] = results[key].pad(pad_shape, pad_val=self.pad_val)
-
-    def _pad_seg(self, results):
-        """Pad semantic segmentation map according to
-        ``results['pad_shape']``."""
-        for key in results.get('seg_fields', []):
-            results[key] = mmcv.impad(
-                results[key], shape=results['pad_shape'][:2])
-
     def __call__(self, results):
-        """Call function to pad images, masks, semantic segmentation maps.
+        """Call function to pad images.
 
         Args:
             results (dict): Result dict from loading pipeline.
@@ -601,8 +588,6 @@ class Pad:
             dict: Updated result dict.
         """
         self._pad_img(results)
-        self._pad_masks(results)
-        self._pad_seg(results)
         return results
 
     def __repr__(self):
@@ -614,7 +599,7 @@ class Pad:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Normalize:
     """Normalize the image.
 
@@ -655,7 +640,7 @@ class Normalize:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class RandomCrop:
     """Random crop the image & subject/object bboxes.
 
@@ -827,7 +812,7 @@ class RandomCrop:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class SegRescale:
     """Rescale semantic segmentation maps.
 
@@ -865,7 +850,7 @@ class SegRescale:
         return self.__class__.__name__ + f'(scale_factor={self.scale_factor})'
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class PhotoMetricDistortion:
     """Apply photometric distortion to image sequentially, every transformation
     is applied with a probability of 0.5. The position of random contrast is in
@@ -972,7 +957,7 @@ class PhotoMetricDistortion:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Expand:
     """Random expand the image & bboxes.
 
@@ -1064,7 +1049,7 @@ class Expand:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class MinIoURandomCrop:
     """Random crop the image & bboxes, the cropped patches have minimum IoU
     requirement with original image & bboxes, the IoU threshold is randomly
@@ -1204,7 +1189,7 @@ class MinIoURandomCrop:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Corrupt:
     """Corruption augmentation.
 
@@ -1248,7 +1233,7 @@ class Corrupt:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Albu:
     """Albumentation augmentation.
 
@@ -1452,7 +1437,7 @@ class Albu:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class RandomCenterCropPad:
     """Random center crop and random around padding for CornerNet.
 
@@ -1801,7 +1786,7 @@ class RandomCenterCropPad:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class CutOut:
     """CutOut operation.
 
@@ -1875,7 +1860,7 @@ class CutOut:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class Mosaic:
     """Mosaic augmentation.
 
@@ -2108,7 +2093,7 @@ class Mosaic:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class MixUp:
     """MixUp data augmentation.
 
@@ -2345,7 +2330,7 @@ class MixUp:
         return repr_str
 
 
-@PIPELINES.register_module()
+@PIPELINES.register_module(force=True)
 class RandomAffine:
     """Random affine transform data augmentation.
 
