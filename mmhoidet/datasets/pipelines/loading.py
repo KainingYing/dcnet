@@ -153,6 +153,7 @@ class LoadHoiAnnotations:
 
         ann_info = results['ann_info']
         results['gt_sub_bboxes'] = ann_info['sub_bboxes'].copy()
+        results['bbox_fields'].append('gt_sub_bboxes')
         return results
 
     def _load_obj_bboxes(self, results):
@@ -160,18 +161,21 @@ class LoadHoiAnnotations:
 
         ann_info = results['ann_info']
         results['gt_obj_bboxes'] = ann_info['obj_bboxes'].copy()
+        results['bbox_fields'].append('gt_obj_bboxes')
         return results
 
     def _load_obj_labels(self, results):
         """Private function to load object label annotations."""
 
         results['gt_obj_labels'] = results['ann_info']['obj_labels'].copy()
+        results['label_fields'].append('gt_obj_labels')
         return results
 
     def _load_verb_labels(self, results):
         """Private function to load verb label annotations."""
 
         results['gt_verb_labels'] = results['ann_info']['verb_labels'].copy()
+        results['label_fields'].append('gt_verb_labels')
         return results
 
     def __call__(self, results):

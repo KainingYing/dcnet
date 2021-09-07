@@ -126,11 +126,8 @@ class HICODet(Dataset):
     def pre_pipeline(self, results):
         """Prepare results dict for pipeline."""
         results['img_prefix'] = self.img_prefix
-        # results['seg_prefix'] = self.seg_prefix
-        # results['proposal_file'] = self.proposal_file
-        results['bbox_fields'] = []
-        # results['mask_fields'] = []
-        # results['seg_fields'] = []
+        results['bbox_fields'] = []  # gt_sub_bboxes & gt_obj_bboxes
+        results['label_fields'] = []  # gt_obj_bboxes & gt_verb_bboxes
 
     def prepare_train_img(self, idx):
         """

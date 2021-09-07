@@ -27,9 +27,9 @@ except ImportError:
 
 @PIPELINES.register_module()
 class Resize:
-    """Resize images & bbox & mask.
+    """Resize images & subject/object bbox.
 
-    This transform resizes the input image to some scale. Bboxes and masks are
+    This transform resizes the input image to some scale. Subject and object bboxes are
     then resized with the same scale factor. If the input dict contains the key
     "scale", then the scale in the input dict is used, otherwise the specified
     scale in the init method is used. If the input dict contains the key
@@ -244,36 +244,8 @@ class Resize:
                 bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0])
             results[key] = bboxes
 
-    def _resize_masks(self, results):
-        """Resize masks with ``results['scale']``"""
-        for key in results.get('mask_fields', []):
-            if results[key] is None:
-                continue
-            if self.keep_ratio:
-                results[key] = results[key].rescale(results['scale'])
-            else:
-                results[key] = results[key].resize(results['img_shape'][:2])
-
-    def _resize_seg(self, results):
-        """Resize semantic segmentation map with ``results['scale']``."""
-        for key in results.get('seg_fields', []):
-            if self.keep_ratio:
-                gt_seg = mmcv.imrescale(
-                    results[key],
-                    results['scale'],
-                    interpolation='nearest',
-                    backend=self.backend)
-            else:
-                gt_seg = mmcv.imresize(
-                    results[key],
-                    results['scale'],
-                    interpolation='nearest',
-                    backend=self.backend)
-            results['gt_semantic_seg'] = gt_seg
-
     def __call__(self, results):
-        """Call function to resize images, bounding boxes, masks, semantic
-        segmentation map.
+        """Call function to resize images, bounding boxes.
 
         Args:
             results (dict): Result dict from loading pipeline.
@@ -304,8 +276,6 @@ class Resize:
 
         self._resize_img(results)
         self._resize_bboxes(results)
-        self._resize_masks(results)
-        self._resize_seg(results)
         return results
 
     def __repr__(self):
@@ -320,7 +290,7 @@ class Resize:
 
 @PIPELINES.register_module()
 class RandomFlip:
-    """Flip the image & bbox & mask.
+    """Flip the image & subject/object bbox.
 
     If the input dict contains the key "flip", then the flag will be used,
     otherwise it will be randomly decided by a ratio specified in the init
@@ -417,8 +387,7 @@ class RandomFlip:
         return flipped
 
     def __call__(self, results):
-        """Call function to flip bounding boxes, masks, semantic segmentation
-        maps.
+        """Call function to flip subject/object bounding boxes.
 
         Args:
             results (dict): Result dict from loading pipeline.
@@ -461,14 +430,6 @@ class RandomFlip:
                 results[key] = self.bbox_flip(results[key],
                                               results['img_shape'],
                                               results['flip_direction'])
-            # flip masks
-            for key in results.get('mask_fields', []):
-                results[key] = results[key].flip(results['flip_direction'])
-
-            # flip segs
-            for key in results.get('seg_fields', []):
-                results[key] = mmcv.imflip(
-                    results[key], direction=results['flip_direction'])
         return results
 
     def __repr__(self):
@@ -534,7 +495,7 @@ class RandomShift:
                 bbox_w = bboxes[..., 2] - bboxes[..., 0]
                 bbox_h = bboxes[..., 3] - bboxes[..., 1]
                 valid_inds = (bbox_w > self.filter_thr_px) & (
-                    bbox_h > self.filter_thr_px)
+                        bbox_h > self.filter_thr_px)
                 # If the shift does not contain any gt-bbox area, skip this
                 # image.
                 if key == 'gt_bboxes' and not valid_inds.any():
@@ -696,7 +657,7 @@ class Normalize:
 
 @PIPELINES.register_module()
 class RandomCrop:
-    """Random crop the image & bboxes & masks.
+    """Random crop the image & subject/object bboxes.
 
     The absolute `crop_size` is sampled based on `crop_type` and `image_size`,
     then the cropped results are generated.
@@ -721,10 +682,9 @@ class RandomCrop:
     Note:
         - If the image is smaller than the absolute crop size, return the
             original image.
-        - The keys for bboxes, labels and masks must be aligned. That is,
-          `gt_bboxes` corresponds to `gt_labels` and `gt_masks`, and
-          `gt_bboxes_ignore` corresponds to `gt_labels_ignore` and
-          `gt_masks_ignore`.
+        - The keys for bboxes, labels must be aligned. That is,
+          `gt_sub_bboxes` corresponds to `gt_obj_bboxes` and
+          `gt_obj_labels` and `gt_verb_labels`.
         - If the crop does not contain any gt-bbox region and
           `allow_negative_crop` is set to False, skip this image.
     """
@@ -735,7 +695,7 @@ class RandomCrop:
                  allow_negative_crop=False,
                  bbox_clip_border=True):
         if crop_type not in [
-                'relative_range', 'relative', 'absolute', 'absolute_range'
+            'relative_range', 'relative', 'absolute', 'absolute_range'
         ]:
             raise ValueError(f'Invalid crop_type {crop_type}.')
         if crop_type in ['absolute', 'absolute_range']:
@@ -748,15 +708,6 @@ class RandomCrop:
         self.crop_type = crop_type
         self.allow_negative_crop = allow_negative_crop
         self.bbox_clip_border = bbox_clip_border
-        # The key correspondence from bboxes to labels and masks.
-        self.bbox2label = {
-            'gt_bboxes': 'gt_labels',
-            'gt_bboxes_ignore': 'gt_labels_ignore'
-        }
-        self.bbox2mask = {
-            'gt_bboxes': 'gt_masks',
-            'gt_bboxes_ignore': 'gt_masks_ignore'
-        }
 
     def _crop_data(self, results, crop_size, allow_negative_crop):
         """Function to randomly crop images, bounding boxes, masks, semantic
@@ -789,37 +740,35 @@ class RandomCrop:
         results['img_shape'] = img_shape
 
         # crop bboxes accordingly and clip to the image boundary
-        for key in results.get('bbox_fields', []):
-            # e.g. gt_bboxes and gt_bboxes_ignore
+        valid_inds_list = []
+        bboxes_cache = {}
+        for key in results.get('bbox_fields', []):  # Whether clip the bboxes outside the image.
+            # e.g. gt_sub_bboxes and gt_obj_bboxes
             bbox_offset = np.array([offset_w, offset_h, offset_w, offset_h],
                                    dtype=np.float32)
             bboxes = results[key] - bbox_offset
             if self.bbox_clip_border:
-                bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, img_shape[1])
+                bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, img_shape[1])  # np.clip() is similar to torch.clamp()
                 bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0])
+            bboxes_cache[key] = bboxes
             valid_inds = (bboxes[:, 2] > bboxes[:, 0]) & (
-                bboxes[:, 3] > bboxes[:, 1])
-            # If the crop does not contain any gt-bbox area and
-            # allow_negative_crop is False, skip this image.
-            if (key == 'gt_bboxes' and not valid_inds.any()
-                    and not allow_negative_crop):
-                return None
-            results[key] = bboxes[valid_inds, :]
-            # label fields. e.g. gt_labels and gt_labels_ignore
-            label_key = self.bbox2label.get(key)
-            if label_key in results:
-                results[label_key] = results[label_key][valid_inds]
+                    bboxes[:, 3] > bboxes[:, 1])
+            valid_inds_list.append(valid_inds)
 
-            # mask fields, e.g. gt_masks and gt_masks_ignore
-            mask_key = self.bbox2mask.get(key)
-            if mask_key in results:
-                results[mask_key] = results[mask_key][
-                    valid_inds.nonzero()[0]].crop(
-                        np.asarray([crop_x1, crop_y1, crop_x2, crop_y2]))
+        # Note: only GT subject and object bboxes pair included
+        # in the crop region, this pair will be preserved
+        valid_pair_inds = np.array(list(map(lambda x, y: x & y, *valid_inds_list)))
+        # If the crop does not contain any gt-pairs and
+        # allow_negative_crop is False, skip this image.
+        if not valid_pair_inds.any() and not allow_negative_crop:
+            return None
 
-        # crop semantic seg
-        for key in results.get('seg_fields', []):
-            results[key] = results[key][crop_y1:crop_y2, crop_x1:crop_x2]
+        for key in results.get('bbox_fields', []):
+            results[key] = bboxes_cache[key][valid_pair_inds, :]
+
+        # label fields. e.g. gt_obj_labels and gt_verb_labels
+        for key in results.get('label_fields', []):
+            results[key] = results[key][valid_inds]
 
         return results
 
@@ -1244,7 +1193,7 @@ class MinIoURandomCrop:
                 # seg fields
                 for key in results.get('seg_fields', []):
                     results[key] = results[key][patch[1]:patch[3],
-                                                patch[0]:patch[2]]
+                                   patch[0]:patch[2]]
                 return results
 
     def __repr__(self):
@@ -1669,8 +1618,8 @@ class RandomCenterCropPad:
         """
         center = (boxes[:, :2] + boxes[:, 2:]) / 2
         mask = (center[:, 0] > patch[0]) * (center[:, 1] > patch[1]) * (
-            center[:, 0] < patch[2]) * (
-                center[:, 1] < patch[3])
+                center[:, 0] < patch[2]) * (
+                       center[:, 1] < patch[3])
         return mask
 
     def _crop_image_and_paste(self, image, center, size):
@@ -1720,7 +1669,7 @@ class RandomCenterCropPad:
             cropped_center_y - top, cropped_center_y + bottom,
             cropped_center_x - left, cropped_center_x + right
         ],
-                          dtype=np.float32)
+            dtype=np.float32)
 
         return cropped_img, border, patch
 
@@ -1774,7 +1723,7 @@ class RandomCenterCropPad:
                         bboxes[:, 0:4:2] = np.clip(bboxes[:, 0:4:2], 0, new_w)
                         bboxes[:, 1:4:2] = np.clip(bboxes[:, 1:4:2], 0, new_h)
                     keep = (bboxes[:, 2] > bboxes[:, 0]) & (
-                        bboxes[:, 3] > bboxes[:, 1])
+                            bboxes[:, 3] > bboxes[:, 1])
                     bboxes = bboxes[keep]
                     results[key] = bboxes
                     if key in ['gt_bboxes']:
@@ -2115,7 +2064,7 @@ class Mosaic:
                              center_position_xy[0], \
                              center_position_xy[1]
             crop_coord = img_shape_wh[0] - (x2 - x1), img_shape_wh[1] - (
-                y2 - y1), img_shape_wh[0], img_shape_wh[1]
+                    y2 - y1), img_shape_wh[0], img_shape_wh[1]
 
         elif loc == 'top_right':
             # index1 to top right part of image
@@ -2326,7 +2275,7 @@ class MixUp:
         if padded_img.shape[1] > target_w:
             x_offset = random.randint(0, padded_img.shape[1] - target_w)
         padded_cropped_img = padded_img[y_offset:y_offset + target_h,
-                                        x_offset:x_offset + target_w]
+                             x_offset:x_offset + target_w]
 
         # 6. adjust bbox
         retrieve_gt_bboxes = retrieve_results['gt_bboxes']
@@ -2337,7 +2286,7 @@ class MixUp:
 
         if is_filp:
             retrieve_gt_bboxes[:, 0::2] = (
-                origin_w - retrieve_gt_bboxes[:, 0::2][:, ::-1])
+                    origin_w - retrieve_gt_bboxes[:, 0::2][:, ::-1])
 
         # 7. filter
         cp_retrieve_gt_bboxes = retrieve_gt_bboxes.copy()
@@ -2486,8 +2435,8 @@ class RandomAffine:
         translate_matrix = self._get_translation_matrix(trans_x, trans_y)
 
         warp_matrix = (
-            translate_matrix @ shear_matrix @ rotation_matrix @ scaling_matrix
-            @ center_matrix)
+                translate_matrix @ shear_matrix @ rotation_matrix @ scaling_matrix
+                @ center_matrix)
 
         img = cv2.warpPerspective(
             img,

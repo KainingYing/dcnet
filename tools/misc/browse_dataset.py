@@ -18,7 +18,7 @@ def parse_args():
         '--skip-type',
         type=str,
         nargs='+',
-        default=['RandomFlip', 'AutoAugment', 'DefaultFormatBundle', 'Normalize', 'Collect', 'Pad'],
+        default=['DefaultFormatBundle', 'Normalize', 'Collect', 'Pad'],
         help='skip some useless pipeline')
     parser.add_argument(
         '--output-dir',

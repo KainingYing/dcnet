@@ -46,7 +46,7 @@ train_pipeline = [
                     type='RandomCrop',
                     crop_type='absolute_range',
                     crop_size=(384, 600),
-                    allow_negative_crop=True),
+                    allow_negative_crop=True),  # Whether to allow a crop that dose not contain any bbox area.
                 dict(
                     type='Resize',
                     img_scale=[(480, 1333), (512, 1333), (544, 1333),
@@ -60,7 +60,7 @@ train_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=1),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])  # TODO: this keys should be specified
+    dict(type='Collect', keys=['img', 'gt_sub_bboxes', 'gt_obj_bboxes', 'gt_obj_labels', 'gt_verb_labels'])
 ]
 # test_pipeline, NOTE the Pad's size_divisor is different from the default
 # setting (size_divisor=32). While there is little effect on the performance
