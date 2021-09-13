@@ -6,7 +6,7 @@ from ..builder import BBOX_CODERS
 from .base_bbox_coder import BaseBBoxCoder
 
 
-@BBOX_CODERS.register_module(force=True)
+@BBOX_CODERS.register_module()
 class TBLRBBoxCoder(BaseBBoxCoder):
     """TBLR BBox coder.
 
@@ -185,7 +185,7 @@ def tblr2bboxes(priors,
     if clip_border and max_shape is not None:
         # clip bboxes with dynamic `min` and `max` for onnx
         if torch.onnx.is_in_onnx_export():
-            from mmhoidet.core.export import dynamic_clip_for_onnx
+            from mmdet.core.export import dynamic_clip_for_onnx
             xmin, ymin, xmax, ymax = dynamic_clip_for_onnx(
                 xmin, ymin, xmax, ymax, max_shape)
             bboxes = torch.cat([xmin, ymin, xmax, ymax], dim=-1)

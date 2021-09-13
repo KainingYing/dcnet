@@ -5,8 +5,6 @@ import numpy as np
 import torch
 from six.moves import map, zip
 
-from ..mask.structures import BitmapMasks, PolygonMasks
-
 
 def multi_apply(func, *args, **kwargs):
     """Apply function to a list of arguments.
@@ -34,32 +32,13 @@ def unmap(data, count, inds, fill=0):
     """Unmap a subset of item (data) back to the original set of items (of size
     count)"""
     if data.dim() == 1:
-        ret = data.new_full((count, ), fill)
+        ret = data.new_full((count,), fill)
         ret[inds.type(torch.bool)] = data
     else:
-        new_size = (count, ) + data.size()[1:]
+        new_size = (count,) + data.size()[1:]
         ret = data.new_full(new_size, fill)
         ret[inds.type(torch.bool), :] = data
     return ret
-
-
-def mask2ndarray(mask):
-    """Convert Mask to ndarray..
-
-    Args:
-        mask (:obj:`BitmapMasks` or :obj:`PolygonMasks` or
-        torch.Tensor or np.ndarray): The mask to be converted.
-
-    Returns:
-        np.ndarray: Ndarray mask of shape (n, h, w) that has been converted
-    """
-    if isinstance(mask, (BitmapMasks, PolygonMasks)):
-        mask = mask.to_ndarray()
-    elif isinstance(mask, torch.Tensor):
-        mask = mask.detach().cpu().numpy()
-    elif not isinstance(mask, np.ndarray):
-        raise TypeError(f'Unsupported {type(mask)} data type')
-    return mask
 
 
 def flip_tensor(src_tensor, flip_direction):

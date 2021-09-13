@@ -6,9 +6,7 @@ from mmcv.cnn import VGG
 from mmcv.runner.hooks import HOOKS, Hook
 
 from mmhoidet.datasets.builder import PIPELINES
-from mmhoidet.datasets.pipelines import LoadImageFromFile
-# from mmhoidet.models.dense_heads import GARPNHead, RPNHead
-# from mmhoidet.models.roi_heads.mask_heads import FusedSemanticHead
+from mmhoidet.datasets.pipelines import LoadImageFromFile, LoadAnnotations
 
 
 def replace_ImageToTensor(pipelines):
@@ -112,39 +110,43 @@ def get_loading_pipeline(pipeline):
     return loading_pipeline_cfg
 
 
-@HOOKS.register_module(force=True)
+@HOOKS.register_module()
 class NumClassCheckHook(Hook):
 
     def _check_head(self, runner):
-        """Check whether the `num_classes` in head matches the length of
-        `CLASSES` in `dataset`.
+        """Check whether the `num_obj_classes` and `num_verb_classes` in head matches the length of
+        `OBJ_CLASSES` and `VERB_CLASSES` in `dataset`.
 
         Args:
             runner (obj:`EpochBasedRunner`): Epoch based Runner.
         """
         model = runner.model
         dataset = runner.data_loader.dataset
-        if dataset.CLASSES is None:
+        if dataset.OBJ_CLASSES is None or dataset.VERB_CLASSES is None:
             runner.logger.warning(
-                f'Please set `CLASSES` '
+                f'Please set `OBJ_CLASSES` and `VERB_CLASSES` '
                 f'in the {dataset.__class__.__name__} and'
-                f'check if it is consistent with the `num_classes` '
+                f'check if it is consistent with the `num_obj_classes` and `num_verb_classes`'
                 f'of head')
         else:
-            assert type(dataset.CLASSES) is not str, \
+            assert type(dataset.OBJ_CLASSES) is not str or type(dataset.VERB_CLASSES) is not str, \
                 (f'`CLASSES` in {dataset.__class__.__name__}'
-                 f'should be a tuple of str.'
-                 f'Add comma if number of classes is 1 as '
-                 f'CLASSES = ({dataset.CLASSES},)')
+                 f'should be a tuple of str.')
             for name, module in model.named_modules():
-                if hasattr(module, 'num_classes') and not isinstance(
-                        module, (RPNHead, VGG, FusedSemanticHead, GARPNHead)):
-                    assert module.num_classes == len(dataset.CLASSES), \
-                        (f'The `num_classes` ({module.num_classes}) in '
+                # TODO: some model with attribute `num_xx_classes` should be ignored
+                if hasattr(module, 'num_classes'):
+                    assert module.num_obj_classes == len(dataset.OBJ_CLASSES) or module.num_verb_classes == len(dataset.VERB_CLASSES), \
+                        (f'The `num_obj_classes` ({module.num_obj_classes}) in '
                          f'{module.__class__.__name__} of '
                          f'{model.__class__.__name__} does not matches '
-                         f'the length of `CLASSES` '
-                         f'{len(dataset.CLASSES)}) in '
+                         f'the length of `OBJ_CLASSES` '
+                         f'{len(dataset.OBJ_CLASSES)}) in '
+                         f'{dataset.__class__.__name__} or '
+                         f'The `num_verb_classes` ({module.num_verb_classes}) in '
+                         f'{module.__class__.__name__} of '
+                         f'{model.__class__.__name__} does not matches '
+                         f'the length of `VERB_CLASSES` '
+                         f'{len(dataset.VERB_CLASSES)}) in '
                          f'{dataset.__class__.__name__}')
 
     def before_train_epoch(self, runner):

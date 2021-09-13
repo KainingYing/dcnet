@@ -5,9 +5,11 @@ import os
 import os.path as osp
 import time
 import warnings
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))  # noqa
 
-import mmcv
 import torch
+import mmcv
 from mmcv import Config, DictAction
 from mmcv.runner import get_dist_info, init_dist
 from mmcv.utils import get_git_hash
@@ -172,9 +174,11 @@ def main():
         # checkpoints as meta data
         cfg.checkpoint_config.meta = dict(
             mmdet_version=__version__ + get_git_hash()[:7],
-            CLASSES=datasets[0].CLASSES)
+            OBJ_CLASSES=datasets[0].OBJ_CLASSES,
+            VER_CLASSES=datasets[0].VERB_CLASSES)
     # add an attribute for visualization convenience
-    model.CLASSES = datasets[0].CLASSES
+    model.OBJ_CLASSES = datasets[0].OBJ_CLASSES
+    model.VERB_CLASSES = datasets[0].VERB_CLASSES
     train_detector(
         model,
         datasets,

@@ -3,9 +3,7 @@ import os.path as osp
 
 import mmcv
 import numpy as np
-import pycocotools.mask as maskUtils
 
-from mmhoidet.core import BitmapMasks, PolygonMasks
 from ..builder import PIPELINES
 
 try:
@@ -14,7 +12,7 @@ except ImportError:
     rgb2id = None
 
 
-@PIPELINES.register_module(force=True)
+@PIPELINES.register_module()
 class LoadImageFromFile:
     """Load an image from file.
 
@@ -83,7 +81,7 @@ class LoadImageFromFile:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@PIPELINES.register_module()
 class LoadImageFromWebcam(LoadImageFromFile):
     """Load an image from webcam.
 
@@ -115,8 +113,8 @@ class LoadImageFromWebcam(LoadImageFromFile):
         return results
 
 
-@PIPELINES.register_module(force=True)
-class LoadHoiAnnotations:
+@PIPELINES.register_module()
+class LoadAnnotations:
     """Load multiple types of annotations.
 
     Args:
@@ -140,19 +138,24 @@ class LoadHoiAnnotations:
                  with_obj_bbox=True,
                  with_obj_label=True,
                  with_verb_label=True,
-                 file_client_args=dict(backend='disk')):
+                 file_client_args=dict(backend='disk'),
+                 to_float32=True):
         self.with_sub_bbox = with_sub_bbox
         self.with_obj_bbox = with_obj_bbox
         self.with_obj_label = with_obj_label
         self.with_verb_label = with_verb_label
         self.file_client_args = file_client_args.copy()
         self.file_client = None
+        self.to_float32 = to_float32
 
     def _load_sub_bboxes(self, results):
         """Private function to load subject (person) bounding box annotations."""
 
         ann_info = results['ann_info']
-        results['gt_sub_bboxes'] = ann_info['sub_bboxes'].copy()
+        if self.to_float32:
+            results['gt_sub_bboxes'] = ann_info['sub_bboxes'].astype(np.float32)  # astype will create a new id, no need copy()
+        else:
+            results['gt_sub_bboxes'] = ann_info['sub_bboxes']
         results['bbox_fields'].append('gt_sub_bboxes')
         return results
 
@@ -160,7 +163,10 @@ class LoadHoiAnnotations:
         """Private function to load object bounding box annotations."""
 
         ann_info = results['ann_info']
-        results['gt_obj_bboxes'] = ann_info['obj_bboxes'].copy()
+        if self.to_float32:
+            results['gt_obj_bboxes'] = ann_info['obj_bboxes'].astype(np.float32)
+        else:
+            results['gt_obj_bboxes'] = ann_info['obj_bboxes']
         results['bbox_fields'].append('gt_obj_bboxes')
         return results
 

@@ -6,9 +6,9 @@ from .compose import Compose
 from .formating import (Collect, DefaultFormatBundle, ImageToTensor,
                         ToDataContainer, ToTensor, Transpose, to_tensor)
 from .instaboost import InstaBoost
-from .loading import (LoadImageFromFile, LoadImageFromWebcam, LoadHoiAnnotations)
+from .loading import (LoadImageFromFile, LoadImageFromWebcam, LoadAnnotations)
 from .test_time_aug import MultiScaleFlipAug
-from .transforms import (Albu, CutOut, Expand, MinIoURandomCrop, MixUp, Mosaic,
+from .transforms import (CutOut, Expand, MinIoURandomCrop, MixUp, Mosaic,
                          Normalize, Pad, PhotoMetricDistortion, RandomAffine,
                          RandomCenterCropPad, RandomCrop, RandomFlip,
                          RandomShift, Resize, SegRescale)
@@ -18,9 +18,9 @@ __all__ = [
     'Transpose', 'Collect', 'DefaultFormatBundle',
     'LoadImageFromFile', 'LoadImageFromWebcam', 'MultiScaleFlipAug',
     'Resize', 'RandomFlip', 'Pad', 'RandomCrop', 'Normalize', 'SegRescale',
-    'MinIoURandomCrop', 'Expand', 'PhotoMetricDistortion', 'Albu',
+    'MinIoURandomCrop', 'Expand', 'PhotoMetricDistortion',
     'InstaBoost', 'RandomCenterCropPad', 'AutoAugment', 'CutOut', 'Shear',
     'Rotate', 'ColorTransform', 'EqualizeTransform', 'BrightnessTransform',
     'ContrastTransform', 'Translate', 'RandomShift', 'Mosaic', 'MixUp',
-    'RandomAffine', 'LoadHoiAnnotations'
+    'RandomAffine', 'LoadAnnotations'
 ]

@@ -6,7 +6,7 @@ from ..builder import BBOX_CODERS
 from .base_bbox_coder import BaseBBoxCoder
 
 
-@BBOX_CODERS.register_module(force=True)
+@BBOX_CODERS.register_module()
 class YOLOBBoxCoder(BaseBBoxCoder):
     """YOLO BBox coder.
 

@@ -19,7 +19,7 @@ def fp16_clamp(x, min=None, max=None):
     return x.clamp(min, max)
 
 
-@IOU_CALCULATORS.register_module(force=True)
+@IOU_CALCULATORS.register_module()
 class BboxOverlaps2D:
     """2D Overlaps (e.g. IoUs, GIoUs) Calculator."""
 
@@ -75,7 +75,7 @@ class BboxOverlaps2D:
 def bbox_overlaps(bboxes1, bboxes2, mode='iou', is_aligned=False, eps=1e-6):
     """Calculate overlap between two set of bboxes.
 
-    FP16 Contributed by https://github.com/open-mmlab/mmhoidetection/pull/4889
+    FP16 Contributed by https://github.com/open-mmlab/mmdetection/pull/4889
     Note:
         Assume bboxes1 is M x 4, bboxes2 is N x 4, when mode is 'iou',
         there are some new generated variable when calculating IOU

@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import Conv2d, Linear, build_activation_layer
 from mmcv.cnn.bricks.transformer import FFN, build_positional_encoding
-from mmcv.runner import force_fp32
-from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
+from mmcv.runner import force_fp32, BaseModule
 
 from mmhoidet.core import (bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh,
                            build_assigner, build_sampler, multi_apply,
@@ -14,7 +13,7 @@ from ..builder import HEADS, build_loss
 
 
 @HEADS.register_module()
-class QPICHead(AnchorFreeHead):
+class QPICHead(BaseModule):
     """reimplements the QPIC Transformer head."""
 
     def __init__(self,
@@ -29,9 +28,14 @@ class QPICHead(AnchorFreeHead):
                      type='SinePositionalEncoding',
                      num_feats=128,
                      normalize=True),
-                 loss_cls=dict(
+                 loss_obj_cls=dict(
                      type='CrossEntropyLoss',
                      bg_cls_weight=0.1,
+                     use_sigmoid=False,
+                     loss_weight=1.0,
+                     class_weight=1.0),
+                 loss_verb_cls=dict(
+                     type='CrossEntropyLoss',
                      use_sigmoid=False,
                      loss_weight=1.0,
                      class_weight=1.0),
@@ -40,15 +44,15 @@ class QPICHead(AnchorFreeHead):
                  train_cfg=dict(
                      assigner=dict(
                          type='HungarianAssigner',
-                         cls_cost=dict(type='ClassificationCost', weight=1.),
-                         reg_cost=dict(type='BBoxL1Cost', weight=5.0),
-                         iou_cost=dict(
-                             type='IoUCost', iou_mode='giou', weight=2.0))),
+                         obj_cls_cost=dict(type='ClsSoftmaxCost', weight=1.),
+                         verb_cls_cost=dict(type='ClsNoSoftmaxCost', weight=1.),
+                         reg_cost=dict(type='BBoxL1Cost', weight=5.0, box_format='xywh'),
+                         iou_cost=dict(type='IoUCost', iou_mode='giou', weight=2.0))),
                  test_cfg=dict(max_per_img=100),
                  init_cfg=None,
                  **kwargs
                  ):
-        super(AnchorFreeHead, self).__init__(init_cfg)
+        super(BaseModule, self).__init__()
 
         self.num_query = num_query
         self.in_channels = in_channels
@@ -59,6 +63,48 @@ class QPICHead(AnchorFreeHead):
         self.num_obj_classes = num_obj_classes
         self.num_verb_classes = num_verb_classes
 
+        self.bg_cls_weight = 0
+        self.sync_cls_avg_factor = sync_cls_avg_factor
+        class_weight = loss_obj_cls.get('class_weight', None)
+        if class_weight is not None and (self.__class__ is QPICHead):
+            assert isinstance(class_weight, float), 'Expected ' \
+                                                    'class_weight to have type float. Found ' \
+                                                    f'{type(class_weight)}.'
+            bg_cls_weight = loss_obj_cls.get('bg_cls_weight', class_weight)
+            assert isinstance(bg_cls_weight, float), 'Expected ' \
+                                                     'bg_cls_weight to have type float. Found ' \
+                                                     f'{type(bg_cls_weight)}.'
+            class_weight = torch.ones(num_obj_classes + 1) * class_weight
+            # set background class as the last indice
+            class_weight[num_obj_classes] = bg_cls_weight
+            loss_obj_cls.update({'class_weight': class_weight})
+            if 'bg_cls_weight' in loss_obj_cls:
+                loss_obj_cls.pop('bg_cls_weight')
+            self.bg_cls_weight = bg_cls_weight
+
+        self.loss_obj_cls = build_loss(loss_obj_cls)
+        self.loss_verb_cls = build_loss(loss_verb_cls)
+        self.loss_bbox = build_loss(loss_bbox)
+        self.loss_iou = build_loss(loss_iou)
+
+        if train_cfg:
+            assert 'assigner' in train_cfg, 'assigner should be provided ' \
+                                            'when train_cfg is set.'
+            assigner = train_cfg['assigner']
+            assert loss_obj_cls['loss_weight'] == assigner['obj_cls_cost']['weight']
+            assert loss_verb_cls['loss_weight'] == assigner['verb_cls_cost']['weight']
+            assert loss_bbox['loss_weight'] == assigner['reg_cost']['weight']
+            assert loss_iou['loss_weight'] == assigner['iou_cost']['weight']
+            self.assigner = build_assigner(assigner)
+            # QPIC sampling=False, so use PseudoSampler
+            sampler_cfg = dict(type='PseudoSampler')
+            self.sampler = build_sampler(sampler_cfg, context=self)
+
+        self.obj_cls_out_channels = num_obj_classes if self.loss_obj_cls.use_sigmoid else num_obj_classes + 1
+        self.verb_cls_out_channels = num_verb_classes if self.loss_verb_cls.use_sigmoid else num_verb_classes + 1
+        self.act_cfg = transformer.get('act_cfg',
+                                       dict(type='ReLU', inplace=True))
+        self.activate = build_activation_layer(self.act_cfg)
         self.positional_encoding = build_positional_encoding(
             positional_encoding)
         self.transformer = build_transformer(transformer)
@@ -125,10 +171,10 @@ class QPICHead(AnchorFreeHead):
                         state_dict[convert_key] = state_dict[k]
                         del state_dict[k]
 
-        super(AnchorFreeHead,
-              self)._load_from_state_dict(state_dict, prefix, local_metadata,
-                                          strict, missing_keys,
-                                          unexpected_keys, error_msgs)
+        # super(AnchorFreeHead,
+        #       self)._load_from_state_dict(state_dict, prefix, local_metadata,
+        #                                   strict, missing_keys,
+        #                                   unexpected_keys, error_msgs)
 
     def forward_train(self,
                       x,
@@ -157,7 +203,7 @@ class QPICHead(AnchorFreeHead):
                 losses: (dict[str, Tensor]): A dictionary of loss components.
                 proposal_list (list[Tensor]): Proposals of each image.
         """
-        outs = self(x)  # forward
+        outs = self(x, img_metas)  # forward
 
         loss_inputs = outs + (gt_sub_bboxes, gt_obj_bboxes, gt_obj_labels, gt_verb_labels, img_metas)
         return self.loss(*loss_inputs)
@@ -219,22 +265,29 @@ class QPICHead(AnchorFreeHead):
         # position encoding
         pos_embed = self.positional_encoding(masks)  # [bs, embed_dim, h, w]
         # outs_dec: [nb_dec, bs, num_query, embed_dim]
+        # _ represents memory (output results from encoder, with shape [bs, embed_dims, h, w])
         outs_dec, _ = self.transformer(x, masks, self.query_embedding.weight,
                                        pos_embed)
 
-        all_cls_scores = self.fc_cls(outs_dec)
-        all_bbox_preds = self.fc_reg(self.activate(
-            self.reg_ffn(outs_dec))).sigmoid()
-        return all_cls_scores, all_bbox_preds
+        all_sub_bbox_preds = self.fc_sub_reg(self.activate(self.reg_ffn_sub(outs_dec))).sigmoid()
+        all_obj_bbox_preds = self.fc_obj_reg(self.activate(self.reg_ffn_obj(outs_dec))).sigmoid()
+        all_obj_cls_scores = self.fc_obj_cls(outs_dec)
+        all_verb_cls_scores = self.fc_verb_cls(outs_dec)  # multi-label classification
+        return all_sub_bbox_preds, all_obj_bbox_preds, all_obj_cls_scores, all_verb_cls_scores
 
-    @force_fp32(apply_to=('all_cls_scores_list', 'all_bbox_preds_list'))
+    @force_fp32(apply_to=(
+            'all_obj_cls_scores_list', 'all_verb_cls_scores_list', 'all_sub_bbox_preds_list',
+            'all_obj_bbox_preds_list'))
     def loss(self,
-             all_cls_scores_list,
-             all_bbox_preds_list,
-             gt_bboxes_list,
-             gt_labels_list,
-             img_metas,
-             gt_bboxes_ignore=None):
+             all_sub_bbox_preds_list,
+             all_obj_bbox_preds_list,
+             all_obj_cls_scores_list,
+             all_verb_cls_scores_list,
+             gt_sub_bboxes_list,
+             gt_obj_bboxes_list,
+             gt_obj_labels_list,
+             gt_verb_labels_list,
+             img_metas):
         """"Loss function.
 
         Only outputs from the last feature level are used for computing
@@ -260,47 +313,53 @@ class QPICHead(AnchorFreeHead):
             dict[str, Tensor]: A dictionary of loss components.
         """
         # NOTE defaultly only the outputs from the last feature scale is used.
-        all_cls_scores = all_cls_scores_list[-1]
-        all_bbox_preds = all_bbox_preds_list[-1]
-        assert gt_bboxes_ignore is None, \
-            'Only supports for gt_bboxes_ignore setting to None.'
+        all_obj_cls_scores = all_obj_cls_scores_list[-1]
+        all_verb_cls_scores = all_verb_cls_scores_list[-1]
+        all_sub_bbox_preds = all_sub_bbox_preds_list[-1]
+        all_obj_bbox_preds = all_obj_bbox_preds_list[-1]
 
-        num_dec_layers = len(all_cls_scores)
-        all_gt_bboxes_list = [gt_bboxes_list for _ in range(num_dec_layers)]
-        all_gt_labels_list = [gt_labels_list for _ in range(num_dec_layers)]
-        all_gt_bboxes_ignore_list = [
-            gt_bboxes_ignore for _ in range(num_dec_layers)
-        ]
+        num_dec_layers = len(all_obj_cls_scores)
+        all_gt_sub_bboxes_list = [gt_sub_bboxes_list for _ in range(num_dec_layers)]
+        all_gt_obj_boxes_list = [gt_obj_bboxes_list for _ in range(num_dec_layers)]
+        all_gt_obj_labels_list = [gt_obj_labels_list for _ in range(num_dec_layers)]
+        all_gt_verb_labels_list = [gt_verb_labels_list for _ in range(num_dec_layers)]
+
         img_metas_list = [img_metas for _ in range(num_dec_layers)]
 
-        losses_cls, losses_bbox, losses_iou = multi_apply(
-            self.loss_single, all_cls_scores, all_bbox_preds,
-            all_gt_bboxes_list, all_gt_labels_list, img_metas_list,
-            all_gt_bboxes_ignore_list)
+        losses_bbox, losses_iou, losses_obj_cls, losses_verb_cls = multi_apply(
+            self.loss_single, all_sub_bbox_preds, all_obj_bbox_preds, all_obj_cls_scores, all_verb_cls_scores,
+            all_gt_sub_bboxes_list, all_gt_obj_boxes_list, all_gt_obj_labels_list, all_gt_verb_labels_list,
+            img_metas_list)
 
         loss_dict = dict()
         # loss from the last decoder layer
-        loss_dict['loss_cls'] = losses_cls[-1]
         loss_dict['loss_bbox'] = losses_bbox[-1]
         loss_dict['loss_iou'] = losses_iou[-1]
+        loss_dict['loss_obj_cls'] = losses_obj_cls[-1]
+        loss_dict['loss_verb_cls'] = losses_verb_cls[-1]
         # loss from other decoder layers
         num_dec_layer = 0
-        for loss_cls_i, loss_bbox_i, loss_iou_i in zip(losses_cls[:-1],
-                                                       losses_bbox[:-1],
-                                                       losses_iou[:-1]):
-            loss_dict[f'd{num_dec_layer}.loss_cls'] = loss_cls_i
+        for loss_bbox_i, loss_iou_i, loss_obj_cls_i, loss_verb_cls_i in zip(losses_bbox[:-1],
+                                                                            losses_iou[:-1],
+                                                                            losses_obj_cls[:-1],
+                                                                            losses_verb_cls[:-1]):
             loss_dict[f'd{num_dec_layer}.loss_bbox'] = loss_bbox_i
             loss_dict[f'd{num_dec_layer}.loss_iou'] = loss_iou_i
+            loss_dict[f'd{num_dec_layer}.loss_obj_cls'] = loss_obj_cls_i
+            loss_dict[f'd{num_dec_layer}.loss_verb_cls'] = loss_verb_cls_i
             num_dec_layer += 1
         return loss_dict
 
     def loss_single(self,
-                    cls_scores,
-                    bbox_preds,
-                    gt_bboxes_list,
-                    gt_labels_list,
-                    img_metas,
-                    gt_bboxes_ignore_list=None):
+                    sub_bbox_preds,
+                    obj_bbox_preds,
+                    obj_cls_scores,
+                    verb_cls_scores,
+                    gt_sub_bboxes_list,
+                    gt_obj_bboxes_list,
+                    gt_obj_labels_list,
+                    gt_verb_labels_list,
+                    img_metas):
         """"Loss function for outputs from a single decoder layer of a single
         feature level.
 
@@ -322,12 +381,17 @@ class QPICHead(AnchorFreeHead):
             dict[str, Tensor]: A dictionary of loss components for outputs from
                 a single decoder layer.
         """
-        num_imgs = cls_scores.size(0)
-        cls_scores_list = [cls_scores[i] for i in range(num_imgs)]
-        bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]
-        cls_reg_targets = self.get_targets(cls_scores_list, bbox_preds_list,
-                                           gt_bboxes_list, gt_labels_list,
-                                           img_metas, gt_bboxes_ignore_list)
+        num_imgs = obj_cls_scores.size(0)
+        obj_cls_scores_list = [obj_cls_scores[i] for i in range(num_imgs)]
+        verb_cls_scores_list = [verb_cls_scores[i] for i in range(num_imgs)]
+        sub_bbox_preds_list = [sub_bbox_preds[i] for i in range(num_imgs)]
+        obj_bbox_preds_list = [obj_bbox_preds[i] for i in range(num_imgs)]
+        cls_reg_targets = self.get_targets(sub_bbox_preds_list,
+                                           obj_bbox_preds_list,
+                                           obj_cls_scores_list, verb_cls_scores_list,
+                                           gt_sub_bboxes_list, gt_obj_bboxes_list, gt_obj_labels_list,
+                                           gt_verb_labels_list,
+                                           img_metas)
         (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
          num_total_pos, num_total_neg) = cls_reg_targets
         labels = torch.cat(labels_list, 0)
@@ -380,12 +444,16 @@ class QPICHead(AnchorFreeHead):
         return loss_cls, loss_bbox, loss_iou
 
     def get_targets(self,
-                    cls_scores_list,
-                    bbox_preds_list,
-                    gt_bboxes_list,
-                    gt_labels_list,
-                    img_metas,
-                    gt_bboxes_ignore_list=None):
+                    sub_bbox_preds_list,
+                    obj_bbox_preds_list,
+                    obj_cls_scores_list,
+                    verb_cls_scores_list,
+                    gt_sub_bboxes_list,
+                    gt_obj_bboxes_list,
+                    gt_obj_labels_list,
+                    gt_verb_labels_list,
+                    img_metas
+                    ):
         """"Compute regression and classification targets for a batch image.
 
         Outputs from a single decoder layer of a single feature level are used.
@@ -420,29 +488,29 @@ class QPICHead(AnchorFreeHead):
                 - num_total_neg (int): Number of negative samples in all \
                     images.
         """
-        assert gt_bboxes_ignore_list is None, \
-            'Only supports for gt_bboxes_ignore setting to None.'
-        num_imgs = len(cls_scores_list)
-        gt_bboxes_ignore_list = [
-            gt_bboxes_ignore_list for _ in range(num_imgs)
-        ]
+        num_imgs = len(obj_cls_scores_list)
 
-        (labels_list, label_weights_list, bbox_targets_list,
-         bbox_weights_list, pos_inds_list, neg_inds_list) = multi_apply(
-            self._get_target_single, cls_scores_list, bbox_preds_list,
-            gt_bboxes_list, gt_labels_list, img_metas, gt_bboxes_ignore_list)
+        (sub_bbox_targets_list,
+         sub_bbox_weights_list, obj_bbox_targets_list, obj_bbox_weights_list, obj_labels_list, obj_label_weights_list,
+         verb_labels_list, verb_label_weights_list, pos_inds_list,
+         neg_inds_list) = multi_apply(
+            self._get_target_single, sub_bbox_preds_list, obj_bbox_preds_list, obj_cls_scores_list, verb_cls_scores_list,
+            gt_sub_bboxes_list, gt_obj_bboxes_list, gt_obj_labels_list, gt_verb_labels_list, img_metas)
         num_total_pos = sum((inds.numel() for inds in pos_inds_list))
         num_total_neg = sum((inds.numel() for inds in neg_inds_list))
         return (labels_list, label_weights_list, bbox_targets_list,
                 bbox_weights_list, num_total_pos, num_total_neg)
 
     def _get_target_single(self,
-                           cls_score,
-                           bbox_pred,
-                           gt_bboxes,
-                           gt_labels,
-                           img_meta,
-                           gt_bboxes_ignore=None):
+                           sub_bbox_pred,
+                           obj_bbox_pred,
+                           obj_cls_score,
+                           verb_cls_score,
+                           gt_sub_bboxes,
+                           gt_obj_bboxes,
+                           gt_obj_labels,
+                           gt_verb_labels,
+                           img_meta):
         """"Compute regression and classification targets for one image.
 
         Outputs from a single decoder layer of a single feature level are used.
@@ -472,11 +540,10 @@ class QPICHead(AnchorFreeHead):
                 - neg_inds (Tensor): Sampled negative indices for each image.
         """
 
-        num_bboxes = bbox_pred.size(0)
+        num_bboxes = sub_bbox_pred.size(0)
         # assigner and sampler
-        assign_result = self.assigner.assign(bbox_pred, cls_score, gt_bboxes,
-                                             gt_labels, img_meta,
-                                             gt_bboxes_ignore)
+        assign_result = self.assigner.assign(sub_bbox_pred, obj_bbox_pred, obj_cls_score, verb_cls_score, gt_sub_bboxes,
+                                             gt_obj_bboxes, gt_obj_labels, gt_verb_labels, img_meta)
         sampling_result = self.sampler.sample(assign_result, bbox_pred,
                                               gt_bboxes)
         pos_inds = sampling_result.pos_inds
@@ -505,39 +572,3 @@ class QPICHead(AnchorFreeHead):
         bbox_targets[pos_inds] = pos_gt_bboxes_targets
         return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
                 neg_inds)
-
-    # over-write because img_metas are needed as inputs for bbox_head.
-    def forward_train(self,
-                      x,
-                      img_metas,
-                      gt_bboxes,
-                      gt_labels=None,
-                      gt_bboxes_ignore=None,
-                      proposal_cfg=None,
-                      **kwargs):
-        """Forward function for training mode.
-
-        Args:
-            x (list[Tensor]): Features from backbone.
-            img_metas (list[dict]): Meta information of each image, e.g.,
-                image size, scaling factor, etc.
-            gt_bboxes (Tensor): Ground truth bboxes of the image,
-                shape (num_gts, 4).
-            gt_labels (Tensor): Ground truth labels of each box,
-                shape (num_gts,).
-            gt_bboxes_ignore (Tensor): Ground truth bboxes to be
-                ignored, shape (num_ignored_gts, 4).
-            proposal_cfg (mmcv.Config): Test / postprocessing configuration,
-                if None, test_cfg would be used.
-
-        Returns:
-            dict[str, Tensor]: A dictionary of loss components.
-        """
-        assert proposal_cfg is None, '"proposal_cfg" must be None'
-        outs = self(x, img_metas)
-        if gt_labels is None:
-            loss_inputs = outs + (gt_bboxes, img_metas)
-        else:
-            loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
-        losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
-        return losses

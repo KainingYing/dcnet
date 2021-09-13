@@ -3,7 +3,7 @@ from ..builder import BBOX_CODERS
 from .base_bbox_coder import BaseBBoxCoder
 
 
-@BBOX_CODERS.register_module(force=True)
+@BBOX_CODERS.register_module()
 class PseudoBBoxCoder(BaseBBoxCoder):
     """Pseudo bounding box coder."""
 

@@ -7,9 +7,9 @@ from ..builder import BBOX_CODERS
 from .base_bbox_coder import BaseBBoxCoder
 
 
-@BBOX_CODERS.register_module(force=True)
+@BBOX_CODERS.register_module()
 class LegacyDeltaXYWHBBoxCoder(BaseBBoxCoder):
-    """Legacy Delta XYWH BBox coder used in mmhoidet V1.x.
+    """Legacy Delta XYWH BBox coder used in MMDet V1.x.
 
     Following the practice in R-CNN [1]_, this coder encodes bbox (x1, y1, x2,
     y2) into delta (dx, dy, dw, dh) and decodes delta (dx, dy, dw, dh)
@@ -19,7 +19,7 @@ class LegacyDeltaXYWHBBoxCoder(BaseBBoxCoder):
         The main difference between :class`LegacyDeltaXYWHBBoxCoder` and
         :class:`DeltaXYWHBBoxCoder` is whether ``+ 1`` is used during width and
         height calculation. We suggest to only use this coder when testing with
-        mmhoidet V1.x models.
+        MMDet V1.x models.
 
     References:
         .. [1] https://arxiv.org/abs/1311.2524
@@ -86,7 +86,7 @@ def legacy_bbox2delta(proposals,
                       gt,
                       means=(0., 0., 0., 0.),
                       stds=(1., 1., 1., 1.)):
-    """Compute deltas of proposals w.r.t. gt in the mmhoidet V1.x manner.
+    """Compute deltas of proposals w.r.t. gt in the MMDet V1.x manner.
 
     We usually compute the deltas of x, y, w, h of proposals w.r.t ground
     truth bboxes to get regression target.
@@ -137,7 +137,7 @@ def legacy_delta2bbox(rois,
                       stds=(1., 1., 1., 1.),
                       max_shape=None,
                       wh_ratio_clip=16 / 1000):
-    """Apply deltas to shift/scale base boxes in the mmhoidet V1.x manner.
+    """Apply deltas to shift/scale base boxes in the MMDet V1.x manner.
 
     Typically the rois are anchor or proposed bounding boxes and the deltas are
     network outputs used to shift/scale those boxes.
@@ -202,7 +202,7 @@ def legacy_delta2bbox(rois,
 
     # The true legacy box coder should +- 0.5 here.
     # However, current implementation improves the performance when testing
-    # the models trained in mmhoidetection 1.X (~0.5 bbox AP, 0.2 mask AP)
+    # the models trained in MMDetection 1.X (~0.5 bbox AP, 0.2 mask AP)
     x1 = gx - gw * 0.5
     y1 = gy - gh * 0.5
     x2 = gx + gw * 0.5

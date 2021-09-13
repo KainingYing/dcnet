@@ -7,7 +7,7 @@ from mmcv.cnn import CONV_LAYERS
 from .builder import LINEAR_LAYERS
 
 
-@LINEAR_LAYERS.register_module(name='NormedLinear')
+@LINEAR_LAYERS.register_module(name='NormedLinear', force=True)
 class NormedLinear(nn.Linear):
     """Normalized Linear Layer.
 
@@ -39,7 +39,7 @@ class NormedLinear(nn.Linear):
         return F.linear(x_, weight_, self.bias)
 
 
-@CONV_LAYERS.register_module(name='NormedConv2d')
+@CONV_LAYERS.register_module(name='NormedConv2d', force=True)
 class NormedConv2d(nn.Conv2d):
     """Normalized Conv2d Layer.
 

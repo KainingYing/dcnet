@@ -9,7 +9,7 @@ from ..transforms import bbox_rescale
 from .base_bbox_coder import BaseBBoxCoder
 
 
-@BBOX_CODERS.register_module(force=True)
+@BBOX_CODERS.register_module()
 class BucketingBBoxCoder(BaseBBoxCoder):
     """Bucketing BBox Coder for Side-Aware Boundary Localization (SABL).
 

@@ -5,4 +5,11 @@
     <orderEntry type="jdk" jdkName="Remote Python 3.7.11 (sftp://zpf@10.12.41.181:22/home/zpf/miniconda3/envs/mmhoi/bin/python)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
+  <component name="PackageRequirementsSettings">
+    <option name="requirementsPath" value="" />
+  </component>
+  <component name="PyDocumentationSettings">
+    <option name="format" value="GOOGLE" />
+    <option name="myDocStringFormat" value="Google" />
+  </component>
 </module>

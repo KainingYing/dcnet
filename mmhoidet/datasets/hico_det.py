@@ -1,3 +1,4 @@
+import time
 import os.path as osp
 import warnings
 from collections import OrderedDict
@@ -8,12 +9,11 @@ from mmcv.utils import print_log
 from terminaltables import AsciiTable
 from torch.utils.data import Dataset
 
-from mmhoidet.core import eval_map, eval_recalls
 from .builder import DATASETS
 from .pipelines import Compose
 
 
-@DATASETS.register_module(force=True)
+@DATASETS.register_module()
 class HICODet(Dataset):
     OBJ_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                    'train', 'truck', 'boat', 'traffic light', 'fire hydrant',
@@ -30,15 +30,23 @@ class HICODet(Dataset):
                    'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
                    'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush')
 
-    VERB_CLASSES = ('adjust', 'assemble', 'block', 'blow', 'board', 'break', 'brush_with', 'buy', 'carry', 'catch', 'chase', 'check', 'clean',
-                    'control', 'cook', 'cut', 'cut_with', 'direct', 'drag', 'dribble', 'drink_with', 'drive', 'dry', 'eat', 'eat_at',
-                    'exit', 'feed', 'fill', 'flip', 'flush', 'fly', 'greet', 'grind', 'groom', 'herd', 'hit', 'hold', 'hop_on', 'hose',
-                    'hug', 'hunt', 'inspect', 'install', 'jump', 'kick', 'kiss', 'lasso', 'launch', 'lick', 'lie_on', 'lift', 'light',
-                    'load', 'lose', 'make', 'milk', 'move', 'no_interaction', 'open', 'operate', 'pack', 'paint', 'park', 'pay',
-                    'peel', 'pet', 'pick', 'pick_up', 'point', 'pour', 'pull', 'push', 'race', 'read', 'release', 'repair', 'ride',
-                    'row', 'run', 'sail', 'scratch', 'serve', 'set', 'shear', 'sign', 'sip', 'sit_at', 'sit_on', 'slide', 'smell',
-                    'spin', 'squeeze', 'stab', 'stand_on', 'stand_under', 'stick', 'stir', 'stop_at', 'straddle', 'swing', 'tag',
-                    'talk_on', 'teach', 'text_on', 'throw', 'tie', 'toast', 'train', 'turn', 'type_on', 'walk', 'wash', 'watch',
+    VERB_CLASSES = ('adjust', 'assemble', 'block', 'blow', 'board', 'break',
+                    'brush_with', 'buy', 'carry', 'catch', 'chase', 'check',
+                    'clean', 'control', 'cook', 'cut', 'cut_with', 'direct',
+                    'drag', 'dribble', 'drink_with', 'drive', 'dry', 'eat', 'eat_at',
+                    'exit', 'feed', 'fill', 'flip', 'flush', 'fly', 'greet', 'grind',
+                    'groom', 'herd', 'hit', 'hold', 'hop_on', 'hose',
+                    'hug', 'hunt', 'inspect', 'install', 'jump', 'kick', 'kiss',
+                    'lasso', 'launch', 'lick', 'lie_on', 'lift', 'light',
+                    'load', 'lose', 'make', 'milk', 'move', 'no_interaction',
+                    'open', 'operate', 'pack', 'paint', 'park', 'pay',
+                    'peel', 'pet', 'pick', 'pick_up', 'point', 'pour', 'pull', 'push',
+                    'race', 'read', 'release', 'repair', 'ride',
+                    'row', 'run', 'sail', 'scratch', 'serve', 'set', 'shear', 'sign',
+                    'sip', 'sit_at', 'sit_on', 'slide', 'smell', 'spin', 'squeeze',
+                    'stab', 'stand_on', 'stand_under', 'stick', 'stir', 'stop_at', 'straddle', 'swing', 'tag',
+                    'talk_on', 'teach', 'text_on', 'throw', 'tie', 'toast', 'train', 'turn', 'type_on', 'walk', 'wash',
+                    'watch',
                     'wave', 'wear', 'wield', 'zip')
 
     def __init__(self,
@@ -59,16 +67,23 @@ class HICODet(Dataset):
         self.data_infos = self.load_annotations(self.ann_file)
 
         self._valid_obj_cat_ids = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13,
-                               14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-                               24, 25, 27, 28, 31, 32, 33, 34, 35, 36,
-                               37, 38, 39, 40, 41, 42, 43, 44, 46, 47,
-                               48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
-                               58, 59, 60, 61, 62, 63, 64, 65, 67, 70,
-                               72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
-                               82, 84, 85, 86, 87, 88, 89, 90)  # object ids (identical to MS COCO)
+                                   14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                                   24, 25, 27, 28, 31, 32, 33, 34, 35, 36,
+                                   37, 38, 39, 40, 41, 42, 43, 44, 46, 47,
+                                   48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+                                   58, 59, 60, 61, 62, 63, 64, 65, 67, 70,
+                                   72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+                                   82, 84, 85, 86, 87, 88, 89, 90)  # object ids (identical to MS COCO)
         self.obj_cat2label = {ids: i for i, ids in enumerate(self._valid_obj_cat_ids)}
         self._valid_verb_cat_ids = list(range(1, 118))  # 117 action classes
         self.verb_cat2label = {ids: i for i, ids in enumerate(self._valid_verb_cat_ids)}
+
+        # filter images too small and containing no annotations
+        if not test_mode:
+            valid_inds = self._filter_imgs()
+            self.data_infos = [self.data_infos[i] for i in valid_inds]
+            # set group flag for the sampler
+            self._set_group_flag()
 
         # processing pipeline
         self.pipeline = Compose(pipeline)
@@ -79,7 +94,12 @@ class HICODet(Dataset):
 
     def load_annotations(self, ann_file):
         """Load annotation from annotation file."""
-        return mmcv.load(ann_file)
+        print('loading annotations into memory...')
+        tic = time.time()
+        dataset = mmcv.load(ann_file)
+        assert type(dataset) == list, 'annotation file format {} not supported'.format(type(dataset))
+        print('Done (t={:0.2f}s)'.format(time.time() - tic))
+        return dataset
 
     def get_ann_info(self, idx):
         """Get HICO DET annotation by index.
@@ -117,11 +137,12 @@ class HICODet(Dataset):
             sub_bboxes.append(sub_bbox)
             obj_bboxes.append(obj_bbox)
             obj_labels.append(self.obj_cat2label[obj_label])
-            verb_vec = np.zeros(len(self.VERB_CLASSES))
-            verb_vec[self.verb_cat2label[verb_label]] = 1
+            verb_vec = np.zeros(len(self.VERB_CLASSES), dtype=np.float32)  # this data type must align the preds
+            verb_vec[self.verb_cat2label[verb_label]] = 1.0
             verb_labels.append(verb_vec)
 
-        return dict(sub_bboxes=np.array(sub_bboxes), obj_bboxes=np.array(obj_bboxes), obj_labels=np.array(obj_labels), verb_labels=np.array(verb_labels))
+        return dict(sub_bboxes=np.array(sub_bboxes), obj_bboxes=np.array(obj_bboxes), obj_labels=np.array(obj_labels),
+                    verb_labels=np.array(verb_labels))
 
     def pre_pipeline(self, results):
         """Prepare results dict for pipeline."""
@@ -163,7 +184,7 @@ class HICODet(Dataset):
             return self.prepare_test_img(idx)
         while True:
             data = self.prepare_train_img(idx)
-            if data is None:
+            if data is None:  # re-sample a data
                 idx = self._rand_another(idx)
                 continue
             return data
@@ -221,3 +242,34 @@ class HICODet(Dataset):
             raise ValueError(f'Unsupported type {type(classes)} of classes.')
 
         return class_names
+
+    def _filter_imgs(self, min_size=32):
+        """Filter images too small and without ground truths"""
+        valid_inds = []
+        assert 'width' in self.data_infos[0].keys() and 'height' in self.data_infos[0].keys(), 'Please run the script ' \
+                                                                                               '`./tools/mics/dataset_processing.py` first.'
+
+        for i, img_info in enumerate(self.data_infos):
+            # TODO:consider the empty GT case here
+            if img_info['width'] >= min_size and img_info['height'] >= min_size:
+                valid_inds.append(i)
+
+        return valid_inds
+
+    def _set_group_flag(self):
+        """Set flag according to image aspect ratio.
+
+        Images with aspect ratio greater than 1 will be set as group 1,
+        otherwise group 0.
+        """
+        self.flag = np.zeros(len(self), dtype=np.uint8)
+        for i in range(len(self)):
+            img_info = self.data_infos[i]
+            if img_info['width'] / img_info['height'] > 1:
+                self.flag[i] = 1
+
+
+    def _rand_another(self, idx):
+        """Get another random index from the same group as the given index."""
+        pool = np.where(self.flag == self.flag[idx])[0]
+        return np.random.choice(pool)

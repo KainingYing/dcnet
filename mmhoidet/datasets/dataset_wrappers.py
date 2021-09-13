@@ -10,8 +10,9 @@ from mmcv.utils import build_from_cfg, print_log
 from torch.utils.data.dataset import ConcatDataset as _ConcatDataset
 
 from .builder import DATASETS, PIPELINES
-from .coco import CocoDataset
+# from .coco import CocoDataset
 
+CocoDataset = list
 
 @DATASETS.register_module(force=True)
 class ConcatDataset(_ConcatDataset):
@@ -32,6 +33,8 @@ class ConcatDataset(_ConcatDataset):
         self.CLASSES = datasets[0].CLASSES
         self.separate_eval = separate_eval
         if not separate_eval:
+            # TODO: NO ERROR
+
             if any([isinstance(ds, CocoDataset) for ds in datasets]):
                 raise NotImplementedError(
                     'Evaluating concatenated CocoDataset as a whole is not'

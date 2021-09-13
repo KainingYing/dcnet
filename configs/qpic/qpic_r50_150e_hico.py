@@ -14,7 +14,7 @@ model = dict(
     hoi_head=dict(
         type='QPICHead',
         num_obj_classes=80,
-        num_verb_classes=80,
+        num_verb_classes=117,
         in_channels=2048,
         num_query=100,
         num_reg_cls=2,
@@ -53,9 +53,15 @@ model = dict(
                                      'ffn', 'norm')),
             )),
         positional_encoding=dict(
-            type='SinePositionalEncoding', num_feats=128, normalize=True)
-    )
-)
+            type='SinePositionalEncoding', num_feats=128, normalize=True)),
+    train_cfg=dict(
+        assigner=dict(
+            type='HungarianAssigner',
+            obj_cls_cost=dict(type='ClsSoftmaxCost', weight=1.),
+            verb_cls_cost=dict(type='ClsNoSoftmaxCost', weight=1.),
+            reg_cost=dict(type='MaxBBoxL1Cost', weight=5.0, box_format='xywh'),
+            iou_cost=dict(type='MaxIoUCost', iou_mode='giou', weight=2.0))),
+    test_cfg=dict(max_per_img=100))
 
 # dataset settings
 dataset_type = 'HICODet'
@@ -66,7 +72,7 @@ img_norm_cfg = dict(
 # from the default setting in mmdet.
 train_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='LoadHoiAnnotations'),
+    dict(type='LoadAnnotations'),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(
         type='AutoAugment',
@@ -127,7 +133,7 @@ test_pipeline = [
 
 data = dict(
     samples_per_gpu=2,
-    workers_per_gpu=2,
+    workers_per_gpu=0,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/trainval_hico.json',

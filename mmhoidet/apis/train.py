@@ -11,8 +11,7 @@ from mmcv.runner import (HOOKS, DistSamplerSeedHook, EpochBasedRunner,
 from mmcv.utils import build_from_cfg
 
 from mmhoidet.core import DistEvalHook, EvalHook
-from mmhoidet.datasets import (build_dataloader, build_dataset,
-                            replace_ImageToTensor)
+from mmhoidet.datasets import (build_dataloader, build_dataset, replace_ImageToTensor)
 from mmhoidet.utils import get_root_logger
 
 
