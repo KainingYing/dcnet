@@ -4,7 +4,7 @@
 
 ## Introduction
 
-This repo is used to implement HOI Detection method based on MMDet. 
+This repo is used to implement HOI Detection method. 
 
 ## Update
 - [x] Browse the HICO-Det with the `./tools/mics/browse_dataset.py` 

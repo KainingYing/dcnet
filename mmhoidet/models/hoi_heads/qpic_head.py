@@ -35,10 +35,9 @@ class QPICHead(BaseModule):
                      loss_weight=1.0,
                      class_weight=1.0),
                  loss_verb_cls=dict(
-                     type='CrossEntropyLoss',
-                     use_sigmoid=False,
-                     loss_weight=1.0,
-                     class_weight=1.0),
+                     type='FocalLoss',
+                     use_sigmoid=True,
+                     loss_weight=1.0),
                  loss_bbox=dict(type='L1Loss', loss_weight=5.0),
                  loss_iou=dict(type='GIoULoss', loss_weight=2.0),
                  train_cfg=dict(
@@ -294,6 +293,14 @@ class QPICHead(BaseModule):
         losses by default.
 
         Args:
+            all_sub_bbox_preds_list ():
+            all_obj_bbox_preds_list ():
+            all_obj_cls_scores_list ():
+            all_verb_cls_scores_list ():
+            gt_sub_bboxes_list ():
+            gt_obj_bboxes_list ():
+            gt_obj_labels_list ():
+            gt_verb_labels_list ():
             all_cls_scores_list (list[Tensor]): Classification outputs
                 for each feature level. Each is a 4D-tensor with shape
                 [nb_dec, bs, num_query, cls_out_channels].
@@ -392,56 +399,70 @@ class QPICHead(BaseModule):
                                            gt_sub_bboxes_list, gt_obj_bboxes_list, gt_obj_labels_list,
                                            gt_verb_labels_list,
                                            img_metas)
-        (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
-         num_total_pos, num_total_neg) = cls_reg_targets
-        labels = torch.cat(labels_list, 0)
-        label_weights = torch.cat(label_weights_list, 0)
-        bbox_targets = torch.cat(bbox_targets_list, 0)
-        bbox_weights = torch.cat(bbox_weights_list, 0)
+        (sub_bbox_targets_list, sub_bbox_weights_list, obj_bbox_targets_list, obj_bbox_weights_list, obj_labels_list,
+         obj_label_weights_list, verb_labels_list, verb_label_weights_list, num_total_pos, num_total_neg) = cls_reg_targets
+        # obj/verb labels
+        obj_labels = torch.cat(obj_labels_list, 0)
+        verb_labels = torch.cat(verb_labels_list, 0).long()  # targets should be long in Focal Loss
+        obj_label_weights = torch.cat(obj_label_weights_list, 0)
+        verb_label_weights = torch.cat(verb_label_weights_list, 0)
+        # sub/obj bbox
+        sub_bbox_targets = torch.cat(sub_bbox_targets_list, 0)
+        sub_bbox_weights = torch.cat(sub_bbox_weights_list, 0)
+        obj_bbox_targets = torch.cat(obj_bbox_targets_list, 0)
+        obj_bbox_weights = torch.cat(obj_bbox_weights_list, 0)
 
-        # classification loss
-        cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
+        # object classification loss
+        obj_cls_scores = obj_cls_scores.reshape(-1, self.obj_cls_out_channels)
         # construct weighted avg_factor to match with the official DETR repo
-        cls_avg_factor = num_total_pos * 1.0 + \
-                         num_total_neg * self.bg_cls_weight
+        cls_avg_factor = num_total_pos * 1.0 + num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
-                cls_scores.new_tensor([cls_avg_factor]))
+                obj_cls_scores.new_tensor([cls_avg_factor]))
         cls_avg_factor = max(cls_avg_factor, 1)
 
-        loss_cls = self.loss_cls(
-            cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
+        loss_obj_cls = self.loss_obj_cls(
+            obj_cls_scores, obj_labels, obj_label_weights, avg_factor=cls_avg_factor)
 
-        # Compute the average number of gt boxes accross all gpus, for
+        # verb classification (multi-label classification) loss
+        verb_cls_scores = verb_cls_scores.reshape(-1, self.verb_cls_out_channels)  # without softmax
+        loss_verb_cls = self.loss_verb_cls(verb_cls_scores, verb_labels, verb_label_weights, avg_factor=cls_avg_factor)
+
+        # Compute the average number of gt boxes across all gpus, for
         # normalization purposes
-        num_total_pos = loss_cls.new_tensor([num_total_pos])
+        num_total_pos = loss_obj_cls.new_tensor([num_total_pos])
         num_total_pos = torch.clamp(reduce_mean(num_total_pos), min=1).item()
 
         # construct factors used for rescale bboxes
         factors = []
-        for img_meta, bbox_pred in zip(img_metas, bbox_preds):
+        for img_meta, sub_bbox_pred, obj_bbox_pred in zip(img_metas, sub_bbox_preds, obj_bbox_preds):
             img_h, img_w, _ = img_meta['img_shape']
-            factor = bbox_pred.new_tensor([img_w, img_h, img_w,
-                                           img_h]).unsqueeze(0).repeat(
-                bbox_pred.size(0), 1)
+            factor = sub_bbox_pred.new_tensor([img_w, img_h, img_w,
+                                              img_h]).unsqueeze(0).repeat(sub_bbox_pred.size(0), 1)
             factors.append(factor)
         factors = torch.cat(factors, 0)
 
         # DETR regress the relative position of boxes (cxcywh) in the image,
         # thus the learning target is normalized by the image size. So here
         # we need to re-scale them for calculating IoU loss
-        bbox_preds = bbox_preds.reshape(-1, 4)
-        bboxes = bbox_cxcywh_to_xyxy(bbox_preds) * factors
-        bboxes_gt = bbox_cxcywh_to_xyxy(bbox_targets) * factors
+        sub_bbox_preds = sub_bbox_preds.reshape(-1, 4)
+        obj_bbox_preds = obj_bbox_preds.reshape(-1, 4)
 
-        # regression IoU loss, defaultly GIoU loss
-        loss_iou = self.loss_iou(
-            bboxes, bboxes_gt, bbox_weights, avg_factor=num_total_pos)
+        sub_bboxes = bbox_cxcywh_to_xyxy(sub_bbox_preds) * factors
+        sub_bboxes_gt = bbox_cxcywh_to_xyxy(sub_bbox_targets) * factors
+
+        obj_bboxes = bbox_cxcywh_to_xyxy(obj_bbox_preds) * factors
+        obj_bboxes_gt = bbox_cxcywh_to_xyxy(obj_bbox_targets) * factors
 
         # regression L1 loss
         loss_bbox = self.loss_bbox(
-            bbox_preds, bbox_targets, bbox_weights, avg_factor=num_total_pos)
-        return loss_cls, loss_bbox, loss_iou
+            sub_bboxes, obj_bboxes, sub_bboxes_gt, obj_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
+
+        # regression IoU loss, defaultly GIoU loss
+        loss_iou = self.loss_iou(
+            sub_bboxes, obj_bboxes, sub_bboxes_gt, obj_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
+
+        return loss_obj_cls, loss_verb_cls, loss_bbox, loss_iou
 
     def get_targets(self,
                     sub_bbox_preds_list,
@@ -459,6 +480,14 @@ class QPICHead(BaseModule):
         Outputs from a single decoder layer of a single feature level are used.
 
         Args:
+            sub_bbox_preds_list ():
+            obj_bbox_preds_list ():
+            obj_cls_scores_list ():
+            verb_cls_scores_list ():
+            gt_sub_bboxes_list ():
+            gt_obj_bboxes_list ():
+            gt_obj_labels_list ():
+            gt_verb_labels_list ():
             cls_scores_list (list[Tensor]): Box score logits from a single
                 decoder layer for each image with shape [num_query,
                 cls_out_channels].
@@ -488,18 +517,16 @@ class QPICHead(BaseModule):
                 - num_total_neg (int): Number of negative samples in all \
                     images.
         """
-        num_imgs = len(obj_cls_scores_list)
 
-        (sub_bbox_targets_list,
-         sub_bbox_weights_list, obj_bbox_targets_list, obj_bbox_weights_list, obj_labels_list, obj_label_weights_list,
-         verb_labels_list, verb_label_weights_list, pos_inds_list,
-         neg_inds_list) = multi_apply(
-            self._get_target_single, sub_bbox_preds_list, obj_bbox_preds_list, obj_cls_scores_list, verb_cls_scores_list,
+        (sub_bbox_targets_list, sub_bbox_weights_list, obj_bbox_targets_list, obj_bbox_weights_list, obj_labels_list,
+         obj_label_weights_list, verb_labels_list, verb_label_weights_list, pos_inds_list, neg_inds_list) = multi_apply(
+            self._get_target_single, sub_bbox_preds_list, obj_bbox_preds_list, obj_cls_scores_list,
+            verb_cls_scores_list,
             gt_sub_bboxes_list, gt_obj_bboxes_list, gt_obj_labels_list, gt_verb_labels_list, img_metas)
         num_total_pos = sum((inds.numel() for inds in pos_inds_list))
         num_total_neg = sum((inds.numel() for inds in neg_inds_list))
-        return (labels_list, label_weights_list, bbox_targets_list,
-                bbox_weights_list, num_total_pos, num_total_neg)
+        return (sub_bbox_targets_list, sub_bbox_weights_list, obj_bbox_targets_list, obj_bbox_weights_list, obj_labels_list,
+                obj_label_weights_list, verb_labels_list, verb_label_weights_list, num_total_pos, num_total_neg)
 
     def _get_target_single(self,
                            sub_bbox_pred,
@@ -544,31 +571,42 @@ class QPICHead(BaseModule):
         # assigner and sampler
         assign_result = self.assigner.assign(sub_bbox_pred, obj_bbox_pred, obj_cls_score, verb_cls_score, gt_sub_bboxes,
                                              gt_obj_bboxes, gt_obj_labels, gt_verb_labels, img_meta)
-        sampling_result = self.sampler.sample(assign_result, bbox_pred,
-                                              gt_bboxes)
+        # TODO:finish this
+        sampling_result = self.sampler.sample(assign_result, sub_bbox_pred, obj_bbox_pred,
+                                              gt_sub_bboxes, gt_obj_bboxes)
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
 
-        # label targets
-        labels = gt_bboxes.new_full((num_bboxes,),
-                                    self.num_classes,
-                                    dtype=torch.long)
-        labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
-        label_weights = gt_bboxes.new_ones(num_bboxes)
+        # obj_label and verb_label targets
+        obj_labels = gt_sub_bboxes.new_full((num_bboxes,),
+                                            self.num_obj_classes,
+                                            dtype=torch.long)
+        verb_labels = gt_sub_bboxes.new_full((num_bboxes, self.num_verb_classes),
+                                             0,
+                                             dtype=torch.float32)
+        obj_labels[pos_inds] = gt_obj_labels[sampling_result.pos_assigned_gt_inds]
+        verb_labels[pos_inds] = gt_verb_labels[sampling_result.pos_assigned_gt_inds]
+        obj_label_weights = gt_sub_bboxes.new_ones(num_bboxes)
+        verb_label_weights = gt_sub_bboxes.new_ones(num_bboxes)
 
-        # bbox targets
-        bbox_targets = torch.zeros_like(bbox_pred)
-        bbox_weights = torch.zeros_like(bbox_pred)
-        bbox_weights[pos_inds] = 1.0
+        # subject/object bbox targets
+        sub_bbox_targets = torch.zeros_like(sub_bbox_pred)
+        obj_bbox_targets = torch.zeros_like(obj_bbox_pred)
+        sub_bbox_weights = torch.zeros_like(sub_bbox_pred)
+        sub_bbox_weights[pos_inds] = 1.0
+        obj_bbox_weights = torch.zeros_like(obj_bbox_pred)
+        obj_bbox_weights[pos_inds] = 1.0
         img_h, img_w, _ = img_meta['img_shape']
 
         # DETR regress the relative position of boxes (cxcywh) in the image.
         # Thus the learning target should be normalized by the image size, also
         # the box format should be converted from defaultly x1y1x2y2 to cxcywh.
-        factor = bbox_pred.new_tensor([img_w, img_h, img_w,
-                                       img_h]).unsqueeze(0)
-        pos_gt_bboxes_normalized = sampling_result.pos_gt_bboxes / factor
-        pos_gt_bboxes_targets = bbox_xyxy_to_cxcywh(pos_gt_bboxes_normalized)
-        bbox_targets[pos_inds] = pos_gt_bboxes_targets
-        return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
-                neg_inds)
+        factor = sub_bbox_pred.new_tensor([img_w, img_h, img_w, img_h]).unsqueeze(0)
+        pos_gt_sub_bboxes_normalized = sampling_result.pos_gt_sub_bboxes / factor
+        pos_gt_obj_bboxes_normalized = sampling_result.pos_gt_obj_bboxes / factor
+        pos_gt_sub_bboxes_targets = bbox_xyxy_to_cxcywh(pos_gt_sub_bboxes_normalized)
+        pos_gt_obj_bboxes_targets = bbox_xyxy_to_cxcywh(pos_gt_obj_bboxes_normalized)
+        sub_bbox_targets[pos_inds] = pos_gt_sub_bboxes_targets
+        obj_bbox_targets[pos_inds] = pos_gt_obj_bboxes_targets
+        return (sub_bbox_targets, sub_bbox_weights, obj_bbox_targets, obj_bbox_weights,
+                obj_labels, obj_label_weights, verb_labels, verb_label_weights, pos_inds, neg_inds)

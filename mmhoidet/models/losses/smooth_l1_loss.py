@@ -46,6 +46,25 @@ def l1_loss(pred, target):
     return loss
 
 
+@mmcv.jit(derivate=True, coderize=True)
+@weighted_loss
+def sum_l1_loss(sub_pred, sub_target, obj_pred, obj_target):
+    """L1 loss.
+
+    Args:
+        pred (torch.Tensor): The prediction.
+        target (torch.Tensor): The learning target of the prediction.
+
+    Returns:
+        torch.Tensor: Calculated loss
+    """
+    assert sub_pred.size() == sub_target.size() and obj_pred.size() == obj_target.size() and sub_target.numel() > 0 and obj_target.numel() > 0
+    sub_bbox_cost = torch.cdist(sub_pred, sub_target, p=1)
+    obj_bbox_cost = torch.cdist(obj_pred, obj_target, p=1)
+    loss = sub_bbox_cost + obj_bbox_cost
+    return loss
+
+
 @LOSSES.register_module()
 class SmoothL1Loss(nn.Module):
     """Smooth L1 loss.
@@ -137,4 +156,48 @@ class L1Loss(nn.Module):
             reduction_override if reduction_override else self.reduction)
         loss_bbox = self.loss_weight * l1_loss(
             pred, target, weight, reduction=reduction, avg_factor=avg_factor)
+        return loss_bbox
+
+
+@LOSSES.register_module()
+class MaxL1Loss(nn.Module):
+    """L1 loss.
+
+    Args:
+        reduction (str, optional): The method to reduce the loss.
+            Options are "none", "mean" and "sum".
+        loss_weight (float, optional): The weight of loss.
+    """
+
+    def __init__(self, reduction='mean', loss_weight=1.0):
+        super(L1Loss, self).__init__()
+        self.reduction = reduction
+        self.loss_weight = loss_weight
+
+    def forward(self,
+                pred,
+                target,
+                weight=None,
+                avg_factor=None,
+                reduction_override=None,
+                obj_pred=None,
+                obj_target=None):
+        """Forward function.
+
+        Args:
+            pred (torch.Tensor): The prediction.
+            target (torch.Tensor): The learning target of the prediction.
+            weight (torch.Tensor, optional): The weight of loss for each
+                prediction. Defaults to None.
+            avg_factor (int, optional): Average factor that is used to average
+                the loss. Defaults to None.
+            reduction_override (str, optional): The reduction method used to
+                override the original reduction method of the loss.
+                Defaults to None.
+        """
+        assert reduction_override in (None, 'none', 'mean', 'sum')
+        reduction = (
+            reduction_override if reduction_override else self.reduction)
+        loss_bbox = self.loss_weight * sum_l1_loss(
+            pred, target, weight, reduction=reduction, avg_factor=avg_factor, obj_pred=obj_pred, obj_target=obj_target)
         return loss_bbox
