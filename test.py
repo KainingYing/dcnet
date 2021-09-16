@@ -53,6 +53,15 @@ def py_sigmoid_focal_loss(pred,
 
 
 if __name__ == '__main__':
-    pred = torch.randn(100, 117)
-    target = torch.randn(100, 117)
+    # pred = torch.randn(100, 117)
+    # target = torch.randn(100, 117)
+    pred = [
+        [-100, 100, 0],
+        [0, 100, 100]
+    ]
+    target = [
+        [0, 1, 0],
+        [0, 1, 1]
+    ]
+
     print(py_sigmoid_focal_loss(pred, target))

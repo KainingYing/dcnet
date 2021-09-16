@@ -57,3 +57,9 @@ mmhoidet
 ```
 `note`: HICO-Det can be downloaded [here](https://drive.google.com/open?id=1QZcJmGVlF9f4h-XLWe9Gkmnmj2z1gSnk). The `test_hico.json` and `trainval_hico.json` in `annotations` is provided by [PPDM](https://github.com/YueLiao/PPDM). You can download the annotations from [here](https://drive.google.com/open?id=1WI-gsNLS-t0Kh8TVki1wXqc3y2Ow1f2R) and replace the original annotations directory.
 
+Besides, you need to do some tiny changes to the dataset annotation file with the following command:
+
+```shell
+python ./tools/misc/dataset_process.py ./data/hico_20160224_det --data_type test train
+```
+
