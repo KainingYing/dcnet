@@ -2,9 +2,10 @@
 import mmcv
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ..builder import LOSSES
-from .utils import weighted_loss
+from .utils import weighted_loss, weight_reduce_loss
 
 
 @mmcv.jit(derivate=True, coderize=True)
@@ -160,7 +161,7 @@ class L1Loss(nn.Module):
 
 
 @LOSSES.register_module()
-class MaxL1Loss(nn.Module):
+class SumL1Loss(nn.Module):
     """L1 loss.
 
     Args:
@@ -170,18 +171,18 @@ class MaxL1Loss(nn.Module):
     """
 
     def __init__(self, reduction='mean', loss_weight=1.0):
-        super(L1Loss, self).__init__()
+        super(SumL1Loss, self).__init__()
         self.reduction = reduction
         self.loss_weight = loss_weight
 
     def forward(self,
-                pred,
-                target,
+                sub_pred,
+                sub_target,
+                obj_pred,
+                obj_target,
                 weight=None,
                 avg_factor=None,
-                reduction_override=None,
-                obj_pred=None,
-                obj_target=None):
+                reduction_override=None):
         """Forward function.
 
         Args:
@@ -198,6 +199,29 @@ class MaxL1Loss(nn.Module):
         assert reduction_override in (None, 'none', 'mean', 'sum')
         reduction = (
             reduction_override if reduction_override else self.reduction)
-        loss_bbox = self.loss_weight * sum_l1_loss(
-            pred, target, weight, reduction=reduction, avg_factor=avg_factor, obj_pred=obj_pred, obj_target=obj_target)
-        return loss_bbox
+        assert sub_pred.size() == sub_target.size() and obj_pred.size() == obj_target.size() and sub_target.numel() > 0 and obj_target.numel() > 0
+        # sub_bbox_cost = torch.cdist(sub_pred, sub_target, p=1)
+        sub_bbox_cost = F.l1_loss(sub_pred, sub_target, reduction='none')
+        obj_bbox_cost = F.l1_loss(obj_pred, obj_target, reduction='none')
+        # obj_bbox_cost = torch.cdist(obj_pred, obj_target, p=1)
+        loss = sub_bbox_cost + obj_bbox_cost
+
+        if weight is not None:
+            if weight.shape != loss.shape:
+                if weight.size(0) == loss.size(0):
+                    # For most cases, weight is of shape (num_priors, ),
+                    #  which means it does not have the second axis num_class
+                    weight = weight.view(-1, 1)
+                else:
+                    # Sometimes, weight per anchor per class is also needed. e.g.
+                    #  in FSAF. But it may be flattened of shape
+                    #  (num_priors x num_class, ), while loss is still of shape
+                    #  (num_priors, num_class).
+                    assert weight.numel() == loss.numel()
+                    weight = weight.view(loss.size(0), -1)
+            assert weight.ndim == loss.ndim
+        reduction = (
+            reduction_override if reduction_override else self.reduction)
+        loss = weight_reduce_loss(loss, weight, reduction, avg_factor)
+        return loss
+

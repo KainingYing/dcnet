@@ -86,7 +86,7 @@ def weighted_loss(loss_func):
     tensor(1.5000)
     """
 
-    @functools.wraps(loss_func)
+    @functools.wraps(loss_func)  # this decorate is used to keep the meta info
     def wrapper(pred,
                 target,
                 weight=None,

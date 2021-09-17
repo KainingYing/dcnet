@@ -639,7 +639,7 @@ class Normalize:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@PIPELINES.register_module()
 class RandomCrop:
     """Random crop the image & subject/object bboxes.
 
@@ -752,8 +752,7 @@ class RandomCrop:
 
         # label fields. e.g. gt_obj_labels and gt_verb_labels
         for key in results.get('label_fields', []):
-            results[key] = results[key][valid_inds]
-
+            results[key] = results[key][valid_pair_inds]
         return results
 
     def _get_crop_size(self, image_size):

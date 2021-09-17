@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from mmcv.ops import sigmoid_focal_loss as _sigmoid_focal_loss
 
 from ..builder import LOSSES
-from .utils import weight_reduce_loss
+from .utils import weight_reduce_loss, weighted_loss
 
 
 # This method is only for debugging
@@ -180,34 +180,67 @@ class FocalLoss(nn.Module):
             raise NotImplementedError
         return loss_cls
 
-if __name__ == '__main__':
-    def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
+
+@LOSSES.register_module()
+class ElementWiseFocalLoss(nn.Module):
+    """An element-wise focal loss"""
+
+    def __init__(self,
+                 use_sigmoid=True,
+                 gamma=2.0,
+                 alpha=0.25,
+                 reduction='mean',
+                 loss_weight=1.0):
+        super(ElementWiseFocalLoss, self).__init__()
+        assert use_sigmoid is True, 'Only sigmoid focal loss supported now.'
+        self.use_sigmoid = use_sigmoid
+        self.gamma = gamma
+        self.alpha = alpha
+        self.reduction = reduction
+        self.loss_weight = loss_weight
+
+
+    def forward(self,
+                pred,
+                target,
+                weight=None,
+                avg_factor=None,
+                reduction_override=None):
         """
-        Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
         Args:
-            inputs: A float tensor of arbitrary shape.
-                    The predictions for each example.
-            targets: A float tensor with the same shape as inputs. Stores the binary
-                     classification label for each element in inputs
-                    (0 for the negative class and 1 for the positive class).
-            alpha: (optional) Weighting factor in range (0,1) to balance
-                    positive vs negative examples. Default = -1 (no weighting).
-            gamma: Exponent of the modulating factor (1 - p_t) to
-                   balance easy vs hard examples.
+            pred (tensor): Shaped [num_batch, num_classes]
+            target (tensor): Shaped [num_gt, num_classes]. Note this is
+                usually the multi-label
+            weight (torch.tensor): The weight of loss for each
+                prediction. Defaults to None.
+            avg_factor ():
+            reduction_override ():
         Returns:
-            Loss tensor
+            loss (tensor):Shaped [num_batch, num_classes]
+
         """
-        prob = inputs.sigmoid()
-        ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-        p_t = prob * targets + (1 - prob) * (1 - targets)
-        loss = ce_loss * ((1 - p_t) ** gamma)
+        pred_sigmoid = pred.sigmoid()
+        target = target.type_as(pred)
+        pt = (1 - pred_sigmoid) * target + pred_sigmoid * (1 - target)
+        focal_weight = (self.alpha * target + (1 - self.alpha) *
+                        (1 - target)) * pt.pow(self.gamma)
+        loss = F.binary_cross_entropy_with_logits(pred, target, reduction='none') * focal_weight
 
-        if alpha >= 0:
-            alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
-            loss = alpha_t * loss
-
-        return loss.mean(1).sum() / num_boxes
-
-    pred = torch.randn(100, 117)
-    gt = torch.randn(100, 117)
-    print(sigmoid_focal_loss(pred, gt))
+        if weight is not None:
+            if weight.shape != loss.shape:
+                if weight.size(0) == loss.size(0):
+                    # For most cases, weight is of shape (num_priors, ),
+                    #  which means it does not have the second axis num_class
+                    weight = weight.view(-1, 1)
+                else:
+                    # Sometimes, weight per anchor per class is also needed. e.g.
+                    #  in FSAF. But it may be flattened of shape
+                    #  (num_priors x num_class, ), while loss is still of shape
+                    #  (num_priors, num_class).
+                    assert weight.numel() == loss.numel()
+                    weight = weight.view(loss.size(0), -1)
+            assert weight.ndim == loss.ndim
+        reduction = (
+            reduction_override if reduction_override else self.reduction)
+        loss = weight_reduce_loss(loss, weight, reduction, avg_factor)
+        return loss

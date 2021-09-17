@@ -219,7 +219,7 @@ class LoadAnnotations:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@PIPELINES.register_module()
 class FilterAnnotations:
     """Filter invalid annotations.
 

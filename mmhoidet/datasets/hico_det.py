@@ -1,12 +1,7 @@
 import time
-import os.path as osp
-import warnings
-from collections import OrderedDict
 
 import mmcv
 import numpy as np
-from mmcv.utils import print_log
-from terminaltables import AsciiTable
 from torch.utils.data import Dataset
 
 from .builder import DATASETS
@@ -140,7 +135,6 @@ class HICODet(Dataset):
             verb_vec = np.zeros(len(self.VERB_CLASSES), dtype=np.float32)  # this data type must align the preds
             verb_vec[self.verb_cat2label[verb_label]] = 1.0
             verb_labels.append(verb_vec)
-
         return dict(sub_bboxes=np.array(sub_bboxes), obj_bboxes=np.array(obj_bboxes), obj_labels=np.array(obj_labels),
                     verb_labels=np.array(verb_labels))
 
@@ -164,7 +158,6 @@ class HICODet(Dataset):
 
         img_info = self.data_infos[idx]  # including information and annotations
         img_info.setdefault('filename', img_info['file_name'])
-        # TODO: how to construct the annotation format
         ann_info = self.get_ann_info(idx)
         results = dict(img_info=img_info, ann_info=ann_info)
         self.pre_pipeline(results)
@@ -184,7 +177,7 @@ class HICODet(Dataset):
             return self.prepare_test_img(idx)
         while True:
             data = self.prepare_train_img(idx)
-            if data is None:  # re-sample a data
+            if data is None:  # re-sample a data if the data is None
                 idx = self._rand_another(idx)
                 continue
             return data
@@ -267,7 +260,6 @@ class HICODet(Dataset):
             img_info = self.data_infos[i]
             if img_info['width'] / img_info['height'] > 1:
                 self.flag[i] = 1
-
 
     def _rand_another(self, idx):
         """Get another random index from the same group as the given index."""

@@ -35,10 +35,10 @@ class QPICHead(BaseModule):
                      loss_weight=1.0,
                      class_weight=1.0),
                  loss_verb_cls=dict(
-                     type='FocalLoss',
+                     type='ElementWiseFocalLoss',
                      use_sigmoid=True,
                      loss_weight=1.0),
-                 loss_bbox=dict(type='L1Loss', loss_weight=5.0),
+                 loss_bbox=dict(type='SumL1Loss', loss_weight=5.0),
                  loss_iou=dict(type='GIoULoss', loss_weight=2.0),
                  train_cfg=dict(
                      assigner=dict(
@@ -422,7 +422,7 @@ class QPICHead(BaseModule):
         cls_avg_factor = max(cls_avg_factor, 1)
 
         loss_obj_cls = self.loss_obj_cls(
-            obj_cls_scores, obj_labels, obj_label_weights, avg_factor=cls_avg_factor)
+            obj_cls_scores, obj_labels, obj_label_weights, avg_factor=cls_avg_factor)  # CEL
 
         # verb classification (multi-label classification) loss
         verb_cls_scores = verb_cls_scores.reshape(-1, self.verb_cls_out_channels)  # without softmax
@@ -459,8 +459,9 @@ class QPICHead(BaseModule):
             sub_bboxes, obj_bboxes, sub_bboxes_gt, obj_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
 
         # regression IoU loss, defaultly GIoU loss
-        loss_iou = self.loss_iou(
-            sub_bboxes, obj_bboxes, sub_bboxes_gt, obj_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
+        # loss_iou = self.loss_iou(
+        #     sub_bboxes, obj_bboxes, sub_bboxes_gt, obj_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
+        loss_iou = torch.tensor(0.1)
 
         return loss_obj_cls, loss_verb_cls, loss_bbox, loss_iou
 
