@@ -4,7 +4,7 @@ import os.path as osp
 import mmcv
 import numpy as np
 
-from ..builder import PIPELINES
+from ..builder import HOI_PIPELINES
 
 try:
     from panopticapi.utils import rgb2id
@@ -12,7 +12,7 @@ except ImportError:
     rgb2id = None
 
 
-@PIPELINES.register_module()
+@HOI_PIPELINES.register_module()
 class LoadImageFromFile:
     """Load an image from file.
 
@@ -81,7 +81,7 @@ class LoadImageFromFile:
         return repr_str
 
 
-@PIPELINES.register_module()
+@HOI_PIPELINES.register_module()
 class LoadImageFromWebcam(LoadImageFromFile):
     """Load an image from webcam.
 
@@ -113,7 +113,7 @@ class LoadImageFromWebcam(LoadImageFromFile):
         return results
 
 
-@PIPELINES.register_module()
+@HOI_PIPELINES.register_module()
 class LoadAnnotations:
     """Load multiple types of annotations.
 
@@ -219,7 +219,7 @@ class LoadAnnotations:
         return repr_str
 
 
-@PIPELINES.register_module()
+@HOI_PIPELINES.register_module()
 class FilterAnnotations:
     """Filter invalid annotations.
 

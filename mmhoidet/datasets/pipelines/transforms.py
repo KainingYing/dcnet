@@ -9,7 +9,7 @@ import numpy as np
 from numpy import random
 
 from mmhoidet.core.evaluation.bbox_overlaps import bbox_overlaps
-from ..builder import PIPELINES
+from ..builder import HOI_PIPELINES
 
 try:
     from imagecorruptions import corrupt
@@ -24,7 +24,7 @@ except ImportError:
     Compose = None
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Resize:
     """Resize images & subject/object bbox.
 
@@ -184,7 +184,7 @@ class Resize:
 
         Returns:
             dict: Two new keys 'scale` and 'scale_idx` are added into \
-                ``results``, which would be used by subsequent pipelines.
+                ``results``, which would be used by subsequent HOI_PIPELINES.
         """
 
         if self.ratio_range is not None:
@@ -287,7 +287,7 @@ class Resize:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class RandomFlip:
     """Flip the image & subject/object bbox.
 
@@ -435,7 +435,7 @@ class RandomFlip:
         return self.__class__.__name__ + f'(flip_ratio={self.flip_ratio})'
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class RandomShift:
     """Shift the image and box given shift pixels and probability.
 
@@ -525,7 +525,7 @@ class RandomShift:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Pad:
     """Pad the image.
 
@@ -598,7 +598,7 @@ class Pad:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Normalize:
     """Normalize the image.
 
@@ -639,7 +639,7 @@ class Normalize:
         return repr_str
 
 
-@PIPELINES.register_module()
+@HOI_PIPELINES.register_module()
 class RandomCrop:
     """Random crop the image & subject/object bboxes.
 
@@ -810,7 +810,7 @@ class RandomCrop:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class SegRescale:
     """Rescale semantic segmentation maps.
 
@@ -848,7 +848,7 @@ class SegRescale:
         return self.__class__.__name__ + f'(scale_factor={self.scale_factor})'
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class PhotoMetricDistortion:
     """Apply photometric distortion to image sequentially, every transformation
     is applied with a probability of 0.5. The position of random contrast is in
@@ -955,7 +955,7 @@ class PhotoMetricDistortion:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Expand:
     """Random expand the image & bboxes.
 
@@ -1047,7 +1047,7 @@ class Expand:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class MinIoURandomCrop:
     """Random crop the image & bboxes, the cropped patches have minimum IoU
     requirement with original image & bboxes, the IoU threshold is randomly
@@ -1187,7 +1187,7 @@ class MinIoURandomCrop:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Corrupt:
     """Corruption augmentation.
 
@@ -1231,7 +1231,7 @@ class Corrupt:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class RandomCenterCropPad:
     """Random center crop and random around padding for CornerNet.
 
@@ -1580,7 +1580,7 @@ class RandomCenterCropPad:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class CutOut:
     """CutOut operation.
 
@@ -1654,7 +1654,7 @@ class CutOut:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Mosaic:
     """Mosaic augmentation.
 
@@ -1887,7 +1887,7 @@ class Mosaic:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class MixUp:
     """MixUp data augmentation.
 
@@ -2124,7 +2124,7 @@ class MixUp:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class RandomAffine:
     """Random affine transform data augmentation.
 

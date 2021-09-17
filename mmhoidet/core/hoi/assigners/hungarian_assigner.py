@@ -1,7 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import torch
 
-from ..builder import HOI_ASSIGNERS
+from ..builder import HOIASSIGNERS
 from ..match_costs import build_match_cost
 from mmhoidet.core.bbox import bbox_cxcywh_to_xyxy
 from .assign_result import AssignResult
@@ -13,7 +13,7 @@ except ImportError:
     linear_sum_assignment = None
 
 
-@HOI_ASSIGNERS.register_module()
+@HOIASSIGNERS.register_module()
 class HungarianAssigner(BaseAssigner):
     """Computes one-to-one matching between predictions and ground truth.
 

@@ -4,11 +4,11 @@ import mmcv
 import numpy as np
 from torch.utils.data import Dataset
 
-from .builder import DATASETS
+from .builder import HOI_DATASETS
 from .pipelines import Compose
 
 
-@DATASETS.register_module()
+@HOI_DATASETS.register_module()
 class HICODet(Dataset):
     OBJ_CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                    'train', 'truck', 'boat', 'traffic light', 'fire hydrant',
@@ -41,8 +41,7 @@ class HICODet(Dataset):
                     'sip', 'sit_at', 'sit_on', 'slide', 'smell', 'spin', 'squeeze',
                     'stab', 'stand_on', 'stand_under', 'stick', 'stir', 'stop_at', 'straddle', 'swing', 'tag',
                     'talk_on', 'teach', 'text_on', 'throw', 'tie', 'toast', 'train', 'turn', 'type_on', 'walk', 'wash',
-                    'watch',
-                    'wave', 'wear', 'wield', 'zip')
+                    'watch', 'wave', 'wear', 'wield', 'zip')
 
     def __init__(self,
                  ann_file,

@@ -1,12 +1,12 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import torch
 
-from ..builder import HOI_SAMPLERS
+from ..builder import HOISAMPLERS
 from .base_sampler import BaseSampler
 from .sampling_result import SamplingResult
 
 
-@HOI_SAMPLERS.register_module()
+@HOISAMPLERS.register_module()
 class PseudoSampler(BaseSampler):
     """A pseudo sampler that does not do sampling actually.
     Modified form `mmdet.bbox.samplers.PseudoSampler`"""

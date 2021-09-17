@@ -21,8 +21,8 @@ if platform.system() != 'Windows':
     soft_limit = min(max(4096, base_soft_limit), hard_limit)
     resource.setrlimit(resource.RLIMIT_NOFILE, (soft_limit, hard_limit))
 
-DATASETS = Registry('dataset')
-PIPELINES = Registry('pipeline')
+HOI_DATASETS = Registry('hoi_dataset')
+HOI_PIPELINES = Registry('hoi_pipeline')
 
 
 def _concat_dataset(cfg, default_args=None):

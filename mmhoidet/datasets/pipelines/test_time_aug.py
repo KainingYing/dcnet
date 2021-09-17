@@ -3,11 +3,11 @@ import warnings
 
 import mmcv
 
-from ..builder import PIPELINES
+from ..builder import HOI_PIPELINES
 from .compose import Compose
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class MultiScaleFlipAug:
     """Test-time augmentation with multiple scales and flipping.
 

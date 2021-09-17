@@ -8,7 +8,7 @@ import mmhoidet
 def collect_env():
     """Collect the information of the running environments."""
     env_info = collect_base_env()
-    env_info['mmhoidetection'] = mmhoidet.__version__ + '+' + get_git_hash()[:7]
+    env_info['MMHOIDetection'] = mmhoidet.__version__ + '+' + get_git_hash()[:7]
     return env_info
 
 

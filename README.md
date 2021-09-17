@@ -22,3 +22,6 @@ This codebase is based on mmdetection(v2.16.0). Please refer to [INSTALL.md](./d
 python tools/misc/browse_dataset.py configs/qpic/qpic_r50_150e_hico.py --output-dir ./results/hico-det
 ```
 
+## Note
+
+- To avoid re-registry a same name module in other OpenMMlab project, MMHOIDet renames the registry like `PIPELINES`->`HOI_PIPELINES`, `DATASETS`->`HOI_DATASETS`

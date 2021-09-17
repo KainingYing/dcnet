@@ -5,7 +5,7 @@ import cv2
 import mmcv
 import numpy as np
 
-from ..builder import PIPELINES
+from ..builder import HOI_PIPELINES
 from .compose import Compose
 
 _MAX_LEVEL = 10
@@ -43,7 +43,7 @@ def bbox2fields():
     return bbox2label, bbox2mask, bbox2seg
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class AutoAugment:
     """Auto augmentation.
 
@@ -108,7 +108,7 @@ class AutoAugment:
         return f'{self.__class__.__name__}(policies={self.policies})'
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Shear:
     """Apply Shear Transformation to image (and its corresponding bbox, mask,
     segmentation).
@@ -325,7 +325,7 @@ class Shear:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Rotate:
     """Apply Rotate Transformation to image (and its corresponding bbox, mask,
     segmentation).
@@ -539,7 +539,7 @@ class Rotate:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Translate:
     """Translate the images, bboxes, masks and segmentation maps horizontally
     or vertically.
@@ -705,7 +705,7 @@ class Translate:
         return results
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class ColorTransform:
     """Apply Color transformation to image. The bboxes, masks, and
     segmentations are not modified.
@@ -754,7 +754,7 @@ class ColorTransform:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class EqualizeTransform:
     """Apply Equalize transformation to image. The bboxes, masks and
     segmentations are not modified.
@@ -793,7 +793,7 @@ class EqualizeTransform:
         repr_str += f'(prob={self.prob})'
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class BrightnessTransform:
     """Apply Brightness transformation to image. The bboxes, masks and
     segmentations are not modified.
@@ -842,7 +842,7 @@ class BrightnessTransform:
         return repr_str
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class ContrastTransform:
     """Apply Contrast transformation to image. The bboxes, masks and
     segmentations are not modified.

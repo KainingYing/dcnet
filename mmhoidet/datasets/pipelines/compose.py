@@ -3,10 +3,10 @@ import collections
 
 from mmcv.utils import build_from_cfg
 
-from ..builder import PIPELINES
+from ..builder import HOI_PIPELINES
 
 
-@PIPELINES.register_module(force=True)
+@HOI_PIPELINES.register_module(force=True)
 class Compose:
     """Compose multiple transforms sequentially.
 
@@ -20,7 +20,7 @@ class Compose:
         self.transforms = []
         for transform in transforms:
             if isinstance(transform, dict):
-                transform = build_from_cfg(transform, PIPELINES)
+                transform = build_from_cfg(transform, HOI_PIPELINES)
                 self.transforms.append(transform)
             elif callable(transform):
                 self.transforms.append(transform)
