@@ -9,12 +9,13 @@ import numpy as np
 from mmcv.utils import build_from_cfg, print_log
 from torch.utils.data.dataset import ConcatDataset as _ConcatDataset
 
-from .builder import DATASETS, PIPELINES
+from .builder import HOI_DATASETS, HOI_PIPELINES
 # from .coco import CocoDataset
 
 CocoDataset = list
 
-@DATASETS.register_module(force=True)
+
+@HOI_DATASETS.register_module()
 class ConcatDataset(_ConcatDataset):
     """A wrapper of concatenated dataset.
 
@@ -130,7 +131,7 @@ class ConcatDataset(_ConcatDataset):
             return eval_results
 
 
-@DATASETS.register_module(force=True)
+@HOI_DATASETS.register_module()
 class RepeatDataset:
     """A wrapper of repeated dataset.
 
@@ -174,7 +175,7 @@ class RepeatDataset:
 
 
 # Modified from https://github.com/facebookresearch/detectron2/blob/41d475b75a230221e21d9cac5d69655e3415e3a4/detectron2/data/samplers/distributed_sampler.py#L57 # noqa
-@DATASETS.register_module(force=True)
+@HOI_DATASETS.register_module()
 class ClassBalancedDataset:
     """A wrapper of repeated dataset with repeat factor.
 
@@ -288,7 +289,7 @@ class ClassBalancedDataset:
         return len(self.repeat_indices)
 
 
-@DATASETS.register_module(force=True)
+@HOI_DATASETS.register_module()
 class MultiImageMixDataset:
     """A wrapper of multiple images mixed dataset.
 
@@ -327,7 +328,7 @@ class MultiImageMixDataset:
         for transform in pipeline:
             if isinstance(transform, dict):
                 self.pipeline_types.append(transform['type'])
-                transform = build_from_cfg(transform, PIPELINES)
+                transform = build_from_cfg(transform, HOI_PIPELINES)
                 self.pipeline.append(transform)
             else:
                 raise TypeError('pipeline must be a dict')

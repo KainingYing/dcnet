@@ -5,7 +5,7 @@ import warnings
 from mmcv.cnn import VGG
 from mmcv.runner.hooks import HOOKS, Hook
 
-from mmhoidet.datasets.builder import PIPELINES
+from mmhoidet.datasets.builder import HOI_PIPELINES
 from mmhoidet.datasets.pipelines import LoadImageFromFile, LoadAnnotations
 
 
@@ -99,7 +99,7 @@ def get_loading_pipeline(pipeline):
     """
     loading_pipeline_cfg = []
     for cfg in pipeline:
-        obj_cls = PIPELINES.get(cfg['type'])
+        obj_cls = HOI_PIPELINES.get(cfg['type'])
         # TODO：use more elegant way to distinguish loading modules
         if obj_cls is not None and obj_cls in (LoadImageFromFile,
                                                LoadAnnotations):

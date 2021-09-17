@@ -461,7 +461,7 @@ class QPICHead(BaseModule):
         # regression IoU loss, defaultly GIoU loss
         # loss_iou = self.loss_iou(
         #     sub_bboxes, obj_bboxes, sub_bboxes_gt, obj_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
-        loss_iou = torch.tensor(0.1)
+        loss_iou = loss_bbox.new_tensor(0.1)
 
         return loss_obj_cls, loss_verb_cls, loss_bbox, loss_iou
 
