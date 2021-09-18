@@ -132,11 +132,11 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=2,
+    samples_per_gpu=1,
+    workers_per_gpu=1,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/trainval_hico.json',
+        ann_file=data_root + 'annotations/train_one.json',
         img_prefix=data_root + 'images/train2015/',
         pipeline=train_pipeline),
     val=dict(
@@ -149,7 +149,7 @@ data = dict(
         ann_file=data_root + 'annotations/test_hico.json',
         img_prefix=data_root + 'images/test2015/',
         pipeline=test_pipeline))
-evaluation = dict(interval=1, metric='bbox')  # 这个部分也是要进行修改的
+evaluation = dict(interval=2000, metric='bbox')  # 这个部分也是要进行修改的
 
 # optimizer
 optimizer = dict(
@@ -164,10 +164,10 @@ lr_config = dict(policy='step', step=[100])
 runner = dict(type='EpochBasedRunner', max_epochs=150)
 
 # setting runtime
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=-1)  # -1 means never
 # yapf:disable
 log_config = dict(
-    interval=50,
+    interval=1,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='TensorboardLoggerHook')
