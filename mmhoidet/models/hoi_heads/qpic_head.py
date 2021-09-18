@@ -38,7 +38,7 @@ class QPICHead(BaseModule):
                      type='ElementWiseFocalLoss',
                      use_sigmoid=True,
                      loss_weight=1.0),
-                 loss_bbox=dict(type='SumL1Loss', loss_weight=5.0),
+                 loss_bbox=dict(type='SmoothL1Loss', loss_weight=5.0),
                  loss_iou=dict(type='GIoULoss', loss_weight=2.0),
                  train_cfg=dict(
                      assigner=dict(
@@ -455,13 +455,16 @@ class QPICHead(BaseModule):
         obj_bboxes_gt = bbox_cxcywh_to_xyxy(obj_bbox_targets) * factors
 
         # regression L1 loss
-        loss_bbox = self.loss_bbox(
-            sub_bboxes, obj_bboxes, sub_bboxes_gt, obj_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
+        loss_sub_bbox = self.loss_bbox(sub_bboxes, sub_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
+        loss_obj_bbox = self.loss_bbox(obj_bboxes, obj_bboxes_gt, obj_bbox_weights, avg_factor=num_total_pos)
+        loss_bbox = loss_sub_bbox + loss_obj_bbox
 
         # regression IoU loss, defaultly GIoU loss
         # loss_iou = self.loss_iou(
         #     sub_bboxes, obj_bboxes, sub_bboxes_gt, obj_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
-        loss_iou = loss_bbox.new_tensor(0.1)
+        loss_sub_iou = self.loss_iou(sub_bboxes, sub_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
+        loss_obj_iou = self.loss_iou(obj_bboxes, obj_bboxes_gt, obj_bbox_weights, avg_factor=num_total_pos)
+        loss_iou = loss_sub_iou + loss_obj_iou
 
         return loss_obj_cls, loss_verb_cls, loss_bbox, loss_iou
 

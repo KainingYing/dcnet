@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import numpy as np
 import torch
 
 from ..builder import HOIASSIGNERS
