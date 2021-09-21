@@ -60,6 +60,6 @@ mmhoidet
 Besides, you need to do some tiny changes to the dataset annotation file with the following command:
 
 ```shell
-python ./tools/misc/dataset_process.py ./data/hico_20160224_det --data_type test train
+python ./tools/data_converters/hico_det.py ./data/hico_20160224_det --data_type test train
 ```
 
