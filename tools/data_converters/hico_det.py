@@ -42,6 +42,7 @@ def add_shape2annotations(data_root, data_type):
         progress_bar.update()
 
     # TODO: overwrite the origin anno_file
+    # TODO: 使用懒读取 pillow的方法，可不可以变快一点
     mmcv.dump(data_infos, anno_file)
 
 

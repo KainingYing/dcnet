@@ -5,6 +5,7 @@ import torch
 
 from ..builder import DETECTORS, build_backbone, build_head
 from .basehoidetector import BaseHoiDetector
+from mmhoidet.core.hoi import hoi2result
 
 
 @DETECTORS.register_module(force=True)
@@ -78,13 +79,13 @@ class QPIC(BaseHoiDetector):
                 corresponds to each class.
         """
         feat = self.extract_feat(img)
-        results_list = self.bbox_head.simple_test(
+        results_list = self.hoi_head.simple_test(
             feat, img_metas, rescale=rescale)
-        bbox_results = [
-            bbox2result(det_bboxes, det_labels, self.bbox_head.num_classes)
-            for det_bboxes, det_labels in results_list
+        hoi_results = [
+            hoi2result(instance_labels, verb_scores, bboxes, sub_ids, obj_ids, valid_hois=self.valid_hois)
+            for instance_labels, verb_scores, bboxes, sub_ids, obj_ids in results_list
         ]
-        return bbox_results
+        return hoi_results
 
     def aug_test(self, imgs, img_metas, rescale=False):
         """Test function with test time augmentation.
@@ -111,11 +112,11 @@ class QPIC(BaseHoiDetector):
         feats = self.extract_feats(imgs)
         results_list = self.bbox_head.aug_test(
             feats, img_metas, rescale=rescale)
-        bbox_results = [
-            bbox2result(det_bboxes, det_labels, self.bbox_head.num_classes)
-            for det_bboxes, det_labels in results_list
+        hoi_results = [
+            hoi2result(instance_labels, verb_labels, bboxes, sub_ids, obj_ids)
+            for instance_labels, verb_labels, bboxes, sub_ids, obj_ids in results_list
         ]
-        return bbox_results
+        return hoi_results
 
     def onnx_export(self, img, img_metas):
         """Test function without test time augmentation.

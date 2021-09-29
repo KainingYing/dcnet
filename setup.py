@@ -1,17 +1,18 @@
 import os
 import re
+from pathlib import Path
 
 from setuptools import find_packages, setup
 
 
-def get_version():
-    version_file = os.path.join('mmhoidet', '__init__.py')
-    with open(version_file, encoding='utf-8') as f:
-        lines = f.readlines()
-    for line in lines:
-        if line.startswith('__version__'):
-            exec(line.strip())
-    return locals()['__version__']
+# def get_version():
+#     version_file = Path('mmhoidet') / '__init__.py'
+#     with open(version_file, encoding='utf-8') as f:
+#         lines = f.readlines()
+#     for line in lines:
+#         if line.startswith('__version__'):
+#             exec(line.strip())
+#     return locals()['__version__']
 
 
 def get_readme():
@@ -22,7 +23,7 @@ def get_readme():
 
 setup(
     name='mmhoidet',
-    version=get_version(),
+    # version=get_version(),
     author='kaining',
     author_email='kennying99@gmail.com',
     license='GPLv2',
@@ -41,10 +42,18 @@ setup(
         'Topic :: Utilities',
     ],
     python_requires='>=3.7',
-    install_requires=['scipy>=1.6', 'torch>=1.6'],
+    install_requires=['scipy>=1.6', 'torch>=1.6', 'mmcv-full>=1.3,<1.4', 'torchvision>=0.7.0', 'matplotlib',
+                      'tensorboard'],
     extras_require={
         'full': [
-            'mmcv-full>=1.3,<1.4', 'mmdet>=2.16,<2.17', 'torchvision>=0.7.0'
+            'mmcv-full>=1.3,<1.4', 'torchvision>=0.7.0'
         ]
     },
-    packages=find_packages(exclude=('.github', 'configs', 'docs', 'tools', 'resources')))
+    packages=find_packages(include=['mmhoidet', 'zjutcv']))
+
+
+# setup(
+#     name='zjutcv',
+#     packages=find_packages(),
+# )
+

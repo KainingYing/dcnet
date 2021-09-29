@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteMappingsManager">
+    <list>
+      <list>
+        <remote-mappings server-id="python@sftp://zpf@10.12.41.181:22/home/zpf/miniconda3/envs/mmhoi/bin/python" />
+      </list>
+    </list>
+  </component>
+</project>

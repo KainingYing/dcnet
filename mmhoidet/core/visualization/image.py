@@ -65,6 +65,42 @@ def imshow_det_interactions(img,
     Returns:
         ndarray: The image with bboxes drawn on it.
     """
+    if len(sub_bboxes) == 0:
+        img = mmcv.bgr2rgb(img)
+        width, height = img.shape[1], img.shape[0]
+        img = np.ascontiguousarray(img)
+
+        fig = plt.figure(win_name, frameon=False)
+        plt.title(win_name)
+        canvas = fig.canvas
+        dpi = fig.get_dpi()
+        # add a small EPS to avoid precision lost due to matplotlib's truncation
+        # (https://github.com/matplotlib/matplotlib/issues/15363)
+        fig.set_size_inches((width + EPS) / dpi, (height + EPS) / dpi)
+        width, height = img.shape[1], img.shape[0]
+        plt.imshow(img)
+        stream, _ = canvas.print_to_buffer()
+        buffer = np.frombuffer(stream, dtype='uint8')
+        img_rgba = buffer.reshape(height, width, 4)
+        rgb, alpha = np.split(img_rgba, [3], axis=2)
+        img = rgb.astype('uint8')
+        img = mmcv.rgb2bgr(img)
+        if show:
+            # We do not use cv2 for display because in some cases, opencv will
+            # conflict with Qt, it will output a warning: Current thread
+            # is not the object's thread. You can refer to
+            # https://github.com/opencv/opencv-python/issues/46 for details
+            if wait_time == 0:
+                plt.show()
+            else:
+                plt.show(block=False)
+                plt.pause(wait_time)
+        if out_file is not None:
+            mmcv.imwrite(img, out_file)
+
+        plt.close()
+
+        return img
 
     assert sub_bboxes.ndim == 2, \
         f' sub_bboxes ndim should be 2, but its ndim is {sub_bboxes.ndim}.'
@@ -77,6 +113,16 @@ def imshow_det_interactions(img,
     assert sub_bboxes.shape[0] == obj_bboxes.shape[0] == obj_labels.shape[0] == \
            verb_labels.shape[0], f'bboxes.shape[0] and labels.shape[0] should have the same length.'
     assert sub_bboxes.shape[1] == 4, f' sub_bboxes.shape[1] should be 4 here'
+
+    if score_thr > 0:
+        assert verb_labels.shape[-1] == len(verb_names) + 1  # The last one means score
+        scores = verb_labels[:, -1]
+        inds = scores > score_thr
+        sub_bboxes = sub_bboxes[inds]
+        obj_bboxes = obj_bboxes[inds]
+        obj_labels = obj_labels[inds]
+        verb_labels = verb_labels[inds, :-1]
+
 
     img = mmcv.imread(img).astype(np.uint8)
 

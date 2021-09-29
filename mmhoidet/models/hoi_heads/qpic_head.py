@@ -20,6 +20,7 @@ class QPICHead(BaseModule):
                  num_obj_classes,
                  num_verb_classes,
                  in_channels,
+                 subject_category_id=0,
                  num_query=100,
                  num_reg_fcs=2,
                  transformer=None,
@@ -61,6 +62,7 @@ class QPICHead(BaseModule):
         self.fp16_enabled = False
         self.num_obj_classes = num_obj_classes
         self.num_verb_classes = num_verb_classes
+        self.subject_category_id = subject_category_id
 
         self.bg_cls_weight = 0
         self.sync_cls_avg_factor = sync_cls_avg_factor
@@ -292,30 +294,6 @@ class QPICHead(BaseModule):
         Only outputs from the last feature level are used for computing
         losses by default.
 
-        Args:
-            all_sub_bbox_preds_list ():
-            all_obj_bbox_preds_list ():
-            all_obj_cls_scores_list ():
-            all_verb_cls_scores_list ():
-            gt_sub_bboxes_list ():
-            gt_obj_bboxes_list ():
-            gt_obj_labels_list ():
-            gt_verb_labels_list ():
-            all_cls_scores_list (list[Tensor]): Classification outputs
-                for each feature level. Each is a 4D-tensor with shape
-                [nb_dec, bs, num_query, cls_out_channels].
-            all_bbox_preds_list (list[Tensor]): Sigmoid regression
-                outputs for each feature level. Each is a 4D-tensor with
-                normalized coordinate format (cx, cy, w, h) and shape
-                [nb_dec, bs, num_query, 4].
-            gt_bboxes_list (list[Tensor]): Ground truth bboxes for each image
-                with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels_list (list[Tensor]): Ground truth class indices for each
-                image with shape (num_gts, ).
-            img_metas (list[dict]): List of image meta information.
-            gt_bboxes_ignore (list[Tensor], optional): Bounding boxes
-                which can be ignored for each image. Default None.
-
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
@@ -404,7 +382,7 @@ class QPICHead(BaseModule):
         # obj/verb labels
         obj_labels = torch.cat(obj_labels_list, 0)
         verb_labels = torch.cat(verb_labels_list, 0).long()  # targets should be long in Focal Loss
-        obj_label_weights = torch.cat(obj_label_weights_list, 0)
+        obj_label_weights = torch.cat(obj_label_weights_list, 0)  # this
         verb_label_weights = torch.cat(verb_label_weights_list, 0)
         # sub/obj bbox
         sub_bbox_targets = torch.cat(sub_bbox_targets_list, 0)
@@ -455,8 +433,8 @@ class QPICHead(BaseModule):
         obj_bboxes_gt = bbox_cxcywh_to_xyxy(obj_bbox_targets) * factors
 
         # regression L1 loss
-        loss_sub_bbox = self.loss_bbox(sub_bboxes, sub_bboxes_gt, sub_bbox_weights, avg_factor=num_total_pos)
-        loss_obj_bbox = self.loss_bbox(obj_bboxes, obj_bboxes_gt, obj_bbox_weights, avg_factor=num_total_pos)
+        loss_sub_bbox = self.loss_bbox(sub_bbox_preds, sub_bbox_targets, sub_bbox_weights, avg_factor=num_total_pos)
+        loss_obj_bbox = self.loss_bbox(obj_bbox_preds, obj_bbox_targets, obj_bbox_weights, avg_factor=num_total_pos)
         loss_bbox = loss_sub_bbox + loss_obj_bbox
 
         # regression IoU loss, defaultly GIoU loss
@@ -466,7 +444,7 @@ class QPICHead(BaseModule):
         loss_obj_iou = self.loss_iou(obj_bboxes, obj_bboxes_gt, obj_bbox_weights, avg_factor=num_total_pos)
         loss_iou = loss_sub_iou + loss_obj_iou
 
-        return loss_obj_cls, loss_verb_cls, loss_bbox, loss_iou
+        return loss_bbox, loss_iou, loss_obj_cls, loss_verb_cls,
 
     def get_targets(self,
                     sub_bbox_preds_list,
@@ -614,3 +592,123 @@ class QPICHead(BaseModule):
         obj_bbox_targets[pos_inds] = pos_gt_obj_bboxes_targets
         return (sub_bbox_targets, sub_bbox_weights, obj_bbox_targets, obj_bbox_weights,
                 obj_labels, obj_label_weights, verb_labels, verb_label_weights, pos_inds, neg_inds)
+
+    def simple_test(self,
+                    feats,
+                    img_metas,
+                    rescale=False):
+        """Test det hois without test-time augmentation."""
+        # forward of this head requires img_metas
+        outs = self.forward(feats, img_metas)
+        results_list = self.get_hois(*outs, img_metas, rescale=rescale)
+        return results_list
+
+    @force_fp32(apply_to=('all_sub_bbox_preds_list', 'all_obj_bbox_preds_list', 'all_obj_cls_scores_list', 'all_verb_cls_scores_list'))
+    def get_hois(self,
+                   all_sub_bbox_preds_list,
+                   all_obj_bbox_preds_list,
+                   all_obj_cls_scores_list,
+                   all_verb_cls_scores_list,
+                   img_metas,
+                   rescale=False):
+        """Transform network outputs for a batch into bbox predictions.
+
+        Args:
+            all_verb_cls_scores_list ():
+            all_obj_cls_scores_list ():
+            all_obj_bbox_preds_list ():
+            all_sub_bbox_preds_list ():
+            img_metas (list[dict]): Meta information of each image.
+            rescale (bool, optional): If True, return boxes in original
+                image space. Default False.
+
+        Returns:
+            list[list[Tensor, Tensor]]: Each item in result_list is 2-tuple. \
+                The first item is an (n, 5) tensor, where the first 4 columns \
+                are bounding box positions (tl_x, tl_y, br_x, br_y) and the \
+                5-th column is a score between 0 and 1. The second item is a \
+                (n,) tensor where each item is the predicted class label of \
+                the corresponding box.
+        """
+        # NOTE defaultly only using outputs from the last feature level,
+        # and only the outputs from the last decoder layer is used.
+        sub_bbox_preds = all_sub_bbox_preds_list[-1][-1]
+        obj_bbox_preds = all_obj_bbox_preds_list[-1][-1]
+        obj_cls_scores = all_obj_cls_scores_list[-1][-1]
+        verb_cls_scores = all_verb_cls_scores_list[-1][-1]
+
+        result_list = []
+        for img_id in range(len(img_metas)):
+            sub_bbox_pred = sub_bbox_preds[img_id]
+            obj_bbox_pred = obj_bbox_preds[img_id]
+            obj_cls_score = obj_cls_scores[img_id]
+            verb_cls_score = verb_cls_scores[img_id]
+            img_shape = img_metas[img_id]['img_shape']
+            scale_factor = img_metas[img_id]['scale_factor']  # todo: how to consider the pad
+            proposals = self._get_hois_single(sub_bbox_pred, obj_bbox_pred, obj_cls_score, verb_cls_score,
+                                              img_shape, scale_factor, rescale)
+            result_list.append(proposals)
+
+        return result_list
+
+    def _get_hois_single(self,
+                         sub_bbox_pred,
+                         obj_bbox_pred,
+                         obj_cls_score,
+                         verb_cls_score,
+                         img_shape,
+                         scale_factor,
+                         rescale=False):
+        """Transform outputs from the last decoder layer into bbox predictions
+        for each image.
+
+        Args:
+            img_shape (tuple[int]): Shape of input image, (height, width, 3).
+            scale_factor (ndarray, optional): Scale factor of the image arange
+                as (w_scale, h_scale, w_scale, h_scale).
+            rescale (bool, optional): If True, return boxes in original image
+                space. Default False.
+
+        Returns:
+            tuple[Tensor]: Results of detected bboxes and labels.
+
+                - det_bboxes: Predicted bboxes with shape [num_query, 5], \
+                    where the first 4 columns are bounding box positions \
+                    (tl_x, tl_y, br_x, br_y) and the 5-th column are scores \
+                    between 0 and 1.
+                - det_labels: Predicted labels of the corresponding box with \
+                    shape [num_query].
+        """
+        assert len(sub_bbox_pred) == len(obj_bbox_pred) == len(obj_cls_score) == len(verb_cls_score)
+        max_per_img = self.test_cfg.get('max_per_img', self.num_query)
+
+        obj_prob = F.softmax(obj_cls_score, -1)
+        obj_scores, obj_labels = obj_prob[..., :-1].max(-1)  # shaped: [num_query, ] and [num_query, ]
+
+        verb_scores = verb_cls_score.sigmoid()
+
+        sub_bboxes = bbox_cxcywh_to_xyxy(sub_bbox_pred)
+        sub_bboxes[:, 0::2] = sub_bboxes[:, 0::2] * img_shape[1]
+        sub_bboxes[:, 1::2] = sub_bboxes[:, 1::2] * img_shape[0]
+        sub_bboxes[:, 0::2].clamp_(min=0, max=img_shape[1])
+        sub_bboxes[:, 1::2].clamp_(min=0, max=img_shape[0])
+
+        obj_bboxes = bbox_cxcywh_to_xyxy(obj_bbox_pred)
+        obj_bboxes[:, 0::2] = obj_bboxes[:, 0::2] * img_shape[1]
+        obj_bboxes[:, 1::2] = obj_bboxes[:, 1::2] * img_shape[0]
+        obj_bboxes[:, 0::2].clamp_(min=0, max=img_shape[1])
+        obj_bboxes[:, 1::2].clamp_(min=0, max=img_shape[0])
+
+        if rescale:
+            sub_bboxes /= sub_bboxes.new_tensor(scale_factor)
+            obj_bboxes /= obj_bboxes.new_tensor(scale_factor)
+        # TODO: this line is strange.
+        sub_labels = torch.full(obj_labels.shape, self.subject_category_id, dtype=obj_labels.dtype, device=obj_labels.device)
+        labels = torch.cat((sub_labels, obj_labels), dim=0)
+        bboxes = torch.cat((sub_bboxes, obj_bboxes), dim=0)
+
+        hoi_scores = verb_scores * obj_scores.unsqueeze(1)
+
+        ids = torch.arange(bboxes.shape[0])
+
+        return labels, hoi_scores, bboxes, ids[:ids.shape[0] // 2], ids[ids.shape[0] // 2:]

@@ -16,6 +16,18 @@ class BaseHoiDetector(BaseModule, metaclass=ABCMeta):
     def __init__(self, init_cfg=None):
         super(BaseHoiDetector, self).__init__(init_cfg)
         self.fp16_enabled = False
+        # TODO: this block is ugly, I will fix this logic
+        self._valid_obj_cat_ids = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13,
+                                   14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                                   24, 25, 27, 28, 31, 32, 33, 34, 35, 36,
+                                   37, 38, 39, 40, 41, 42, 43, 44, 46, 47,
+                                   48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+                                   58, 59, 60, 61, 62, 63, 64, 65, 67, 70,
+                                   72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+                                   82, 84, 85, 86, 87, 88, 89, 90)  # object ids (identical to MS COCO)
+        self.obj_cat2label = {ids: i for i, ids in enumerate(self._valid_obj_cat_ids)}
+        self._valid_verb_cat_ids = list(range(1, 118))  # 117 action classes
+        self.verb_cat2label = {ids: i for i, ids in enumerate(self._valid_verb_cat_ids)}
 
     @property
     def with_neck(self):
@@ -128,7 +140,7 @@ class BaseHoiDetector(BaseModule, metaclass=ABCMeta):
                              f'!= num of image meta ({len(img_metas)})')
 
         # NOTE the batched image size information may be useful, e.g.
-        # in DETR, this is needed for the construction of masks, which is
+        # in DETR or QPIC etc, this is needed for the construction of masks, which is
         # then used for the transformer_head.
         for img, img_meta in zip(imgs, img_metas):
             batch_size = len(img_meta)
@@ -152,7 +164,7 @@ class BaseHoiDetector(BaseModule, metaclass=ABCMeta):
             assert 'proposals' not in kwargs
             return self.aug_test(imgs, img_metas, **kwargs)
 
-    @auto_fp16(apply_to=('img', ))
+    @auto_fp16(apply_to=('img',))
     def forward(self, img, img_metas, return_loss=True, **kwargs):
         """Calls either :func:`forward_train` or :func:`forward_test` depending
         on whether ``return_loss`` is ``True``.
@@ -270,70 +282,62 @@ class BaseHoiDetector(BaseModule, metaclass=ABCMeta):
                     show=False,
                     wait_time=0,
                     out_file=None):
-        """Draw `result` over `img`.
-
-        Args:
-            img (str or Tensor): The image to be displayed.
-            result (Tensor or tuple): The results to draw over `img`
-                bbox_result or (bbox_result, segm_result).
-            score_thr (float, optional): Minimum score of bboxes to be shown.
-                Default: 0.3.
-            bbox_color (str or tuple(int) or :obj:`Color`):Color of bbox lines.
-               The tuple of color should be in BGR order. Default: 'green'
-            text_color (str or tuple(int) or :obj:`Color`):Color of texts.
-               The tuple of color should be in BGR order. Default: 'green'
-            mask_color (None or str or tuple(int) or :obj:`Color`):
-               Color of masks. The tuple of color should be in BGR order.
-               Default: None
-            thickness (int): Thickness of lines. Default: 2
-            font_size (int): Font size of texts. Default: 13
-            win_name (str): The window name. Default: ''
-            wait_time (float): Value of waitKey param.
-                Default: 0.
-            show (bool): Whether to show the image.
-                Default: False.
-            out_file (str or None): The filename to write the image.
-                Default: None.
-
-        Returns:
-            img (Tensor): Only if not `show` or `out_file`
-        """
+        """Draw `result` over `img`."""
         img = mmcv.imread(img)
         img = img.copy()
-        if isinstance(result, tuple):
-            bbox_result, segm_result = result
-            if isinstance(segm_result, tuple):
-                segm_result = segm_result[0]  # ms rcnn
-        else:
-            bbox_result, segm_result = result, None
-        bboxes = np.vstack(bbox_result)
-        labels = [
-            np.full(bbox.shape[0], i, dtype=np.int32)
-            for i, bbox in enumerate(bbox_result)
-        ]
-        labels = np.concatenate(labels)
-        # draw segmentation masks
-        segms = None
-        if segm_result is not None and len(labels) > 0:  # non empty
-            segms = mmcv.concat_list(segm_result)
-            if isinstance(segms[0], torch.Tensor):
-                segms = torch.stack(segms, dim=0).detach().cpu().numpy()
-            else:
-                segms = np.stack(segms, axis=0)
+        assert isinstance(result, dict), f'Result must has type with dict ' \
+                                         f'but get type {type(result)}'
+
+        # result must convert to specific format
+        sub_bboxes, obj_bboxes, obj_labels, verb_labels = [], [], [], []
+
+        # a list used to mark used pair
+        pair2idx = {}
+
+        ins_annos = result['predictions']
+        for hoi_item in result['hoi_prediction']:
+            sub_id = hoi_item['subject_id']
+            obj_id = hoi_item['object_id']
+            verb_label = hoi_item['category_id']
+            score = hoi_item['score']
+            if score < score_thr:
+                continue
+            if (sub_id, obj_id) in pair2idx.keys():
+                # note: only add a label to the verb label vector
+                pair_id = pair2idx[(sub_id, obj_id)]
+                verb_labels[pair_id][self.verb_cat2label[verb_label]] = 1
+                continue
+
+            sub_bbox = ins_annos[sub_id]['bbox']
+            obj_bbox = ins_annos[obj_id]['bbox']
+            obj_label = ins_annos[obj_id]['category_id']
+            pair2idx[(sub_id, obj_id)] = len(pair2idx)  # mark this pair exists
+
+            sub_bboxes.append(sub_bbox)
+            obj_bboxes.append(obj_bbox)
+            obj_labels.append(obj_label)
+            verb_vec = np.zeros(len(self.VERB_CLASSES) + 1, dtype=np.float32)  # this data type must align the preds
+            verb_vec[self.verb_cat2label[verb_label]] = 1.0
+            verb_vec[-1] = score  # put the score in the last
+            verb_labels.append(verb_vec)
+        sub_bboxes, obj_bboxes, obj_labels, verb_labels = np.array(sub_bboxes), np.array(obj_bboxes), np.array(
+            obj_labels), np.array(verb_labels)
         # if out_file specified, do not show image in window
         if out_file is not None:
             show = False
         # draw bounding boxes
-        img = imshow_det_bboxes(
+        img = imshow_det_interactions(
             img,
-            bboxes,
-            labels,
-            segms,
-            class_names=self.CLASSES,
+            sub_bboxes,
+            obj_bboxes,
+            obj_labels,
+            verb_labels,
+            obj_names=self.OBJ_CLASSES,
+            verb_names=self.VERB_CLASSES,
             score_thr=score_thr,
-            bbox_color=bbox_color,
-            text_color=text_color,
-            mask_color=mask_color,
+            subject_color='blue',
+            object_color='yellow',
+            interaction_color='green',
             thickness=thickness,
             font_size=font_size,
             win_name=win_name,
@@ -341,7 +345,7 @@ class BaseHoiDetector(BaseModule, metaclass=ABCMeta):
             wait_time=wait_time,
             out_file=out_file)
 
-        if not (show or out_file):
+        if not (show or out_file is not None):  # TODO: modify this
             return img
 
     def onnx_export(self, img, img_metas):

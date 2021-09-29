@@ -53,7 +53,19 @@ model = dict(
                                      'ffn', 'norm')),
             )),
         positional_encoding=dict(
-            type='SinePositionalEncoding', num_feats=128, normalize=True)),
+            type='SinePositionalEncoding', num_feats=128, normalize=True),
+        loss_obj_cls=dict(type='CrossEntropyLoss',
+                          bg_cls_weight=0.1,
+                          use_sigmoid=False,
+                          loss_weight=1.0,
+                          class_weight=1.0),
+        loss_verb_cls=dict(
+            type='ElementWiseFocalLoss',
+            use_sigmoid=True,
+            loss_weight=1.0),
+        loss_bbox=dict(type='L1Loss', loss_weight=5.0),
+        loss_iou=dict(type='GIoULoss', loss_weight=2.0)),
+
     train_cfg=dict(
         assigner=dict(
             type='HungarianAssigner',
@@ -73,7 +85,7 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations'),
-    dict(type='RandomFlip', flip_ratio=0.5),
+    dict(type='RandomFlip', flip_ratio=0.5),  # TODO: 暂时先不使用
     dict(
         type='AutoAugment',
         policies=[
@@ -108,7 +120,7 @@ train_pipeline = [
                     keep_ratio=True)
             ]]),
     dict(type='Normalize', **img_norm_cfg),
-    dict(type='Pad', size_divisor=1),
+    dict(type='Pad', size_divisor=1),  # No padding here.
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img', 'gt_sub_bboxes', 'gt_obj_bboxes', 'gt_obj_labels', 'gt_verb_labels'])
 ]
@@ -132,24 +144,30 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=1,
+    samples_per_gpu=2,
+    workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/train_one.json',
+        ann_file=data_root + 'annotations/trainval_hico.json',
         img_prefix=data_root + 'images/train2015/',
-        pipeline=train_pipeline),
+        valid_hois_file=data_root + 'annotations/corre_hico.npy',
+        pipeline=train_pipeline,
+        mode='train'),
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/test_hico.json',
         img_prefix=data_root + 'images/test2015/',
-        pipeline=test_pipeline),
+        valid_hois_file=data_root + 'annotations/corre_hico.npy',
+        pipeline=test_pipeline,
+        mode='val'),
     test=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/test_hico.json',
         img_prefix=data_root + 'images/test2015/',
-        pipeline=test_pipeline))
-evaluation = dict(interval=2000, metric='bbox')  # 这个部分也是要进行修改的
+        valid_hois_file=data_root + 'annotations/corre_hico.npy',
+        pipeline=test_pipeline,
+        mode='test'))  # todo：最好在外部也可以引入进行设置
+evaluation = dict(interval=1, metric='mAP')
 
 # optimizer
 optimizer = dict(
@@ -164,13 +182,13 @@ lr_config = dict(policy='step', step=[100])
 runner = dict(type='EpochBasedRunner', max_epochs=150)
 
 # setting runtime
-checkpoint_config = dict(interval=-1)  # -1 means never
+checkpoint_config = dict(interval=1)  # -1 means never
 # yapf:disable
 log_config = dict(
-    interval=1,
+    interval=50,
     hooks=[
         dict(type='TextLoggerHook'),
-        # dict(type='TensorboardLoggerHook')
+        dict(type='TensorboardLoggerHook')
     ])
 # yapf:enable
 custom_hooks = [dict(type='NumClassCheckHook')]
@@ -180,3 +198,4 @@ log_level = 'INFO'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]
+# load_from = './checkpoints/detr_r50_8x2_150e_coco_20201130_194835-2c4b8974.pth'

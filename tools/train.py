@@ -6,7 +6,6 @@ import os.path as osp
 import time
 import warnings
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))  # noqa
 
 import torch
 import mmcv
@@ -19,6 +18,7 @@ from mmhoidet.apis import set_random_seed, train_detector
 from mmhoidet.datasets import build_dataset
 from mmhoidet.models import build_detector
 from mmhoidet.utils import collect_env, get_root_logger
+
 
 
 def parse_args():
@@ -175,10 +175,12 @@ def main():
         cfg.checkpoint_config.meta = dict(
             mmdet_version=__version__ + get_git_hash()[:7],
             OBJ_CLASSES=datasets[0].OBJ_CLASSES,
-            VER_CLASSES=datasets[0].VERB_CLASSES)
-    # add an attribute for visualization convenience
+            VERB_CLASSES=datasets[0].VERB_CLASSES,
+            valid_hois=datasets[0].valid_hois)
+    # add an attribute for visualization and evaluation convenience
     model.OBJ_CLASSES = datasets[0].OBJ_CLASSES
     model.VERB_CLASSES = datasets[0].VERB_CLASSES
+    model.valid_hois = datasets[0].valid_hois
     train_detector(
         model,
         datasets,
@@ -191,3 +193,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    sys.path
