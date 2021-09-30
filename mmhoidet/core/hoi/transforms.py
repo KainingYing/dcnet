@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-def hoi2result(instance_labels, verb_scores, bboxes, sub_ids, obj_ids, max_per_img=None, valid_hois=None):
+def hoi2result(instance_labels, verb_scores, bboxes, sub_ids, obj_ids, max_per_img=100, valid_hois=None):
     """Convert detection hois to a list of numpy arrays.
     Used in QPIC.
 

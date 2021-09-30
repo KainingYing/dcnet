@@ -375,6 +375,7 @@ class HICODet(Dataset):
                     self.tp[triplet].append(0)
                     self.fp[triplet].append(1)
                     self.score[triplet].append(pred_hoi['score'])
+
         map = self.compute_map()
         return map
 
