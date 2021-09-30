@@ -43,7 +43,7 @@ setup(
     ],
     python_requires='>=3.7',
     install_requires=['scipy>=1.6', 'torch>=1.6', 'mmcv-full>=1.3,<1.4', 'torchvision>=0.7.0', 'matplotlib',
-                      'tensorboard'],
+                      'tensorboard', 'terminaltables'],
     extras_require={
         'full': [
             'mmcv-full>=1.3,<1.4', 'torchvision>=0.7.0'
