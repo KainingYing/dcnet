@@ -90,6 +90,14 @@ def parse_args():
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
+
+    parser.add_argument(
+        '--gpu-ids',
+        type=int,
+        nargs='+',
+        help='ids of gpus to use '
+        '(only applicable to non-distributed training)')
+
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -153,6 +161,10 @@ def main():
             for ds_cfg in cfg.data.test:
                 ds_cfg.pipeline = replace_ImageToTensor(ds_cfg.pipeline)
 
+    # set gpu_ids
+    if args.gpu_ids is not None:
+        cfg.gpu_ids = args.gpu_ids
+
     # init distributed env first, since logger depends on the dist info.
     if args.launcher == 'none':
         distributed = False
@@ -197,7 +209,7 @@ def main():
         model.valid_hois = dataset.valid_hois
 
     if not distributed:
-        model = MMDataParallel(model, device_ids=[0])
+        model = MMDataParallel(model, device_ids=[1])
         outputs = single_gpu_test(model, data_loader, args.show, args.show_dir,
                                   args.show_score_thr)
     else:

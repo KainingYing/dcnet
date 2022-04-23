@@ -144,8 +144,8 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=2,
+    samples_per_gpu=4,
+    workers_per_gpu=4,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/trainval_hico.json',
@@ -167,7 +167,8 @@ data = dict(
         valid_hois_file=data_root + 'annotations/corre_hico.npy',
         pipeline=test_pipeline,
         mode='test'))  # todo：最好在外部也可以引入进行设置
-evaluation = dict(interval=1, metric='mAP')
+
+evaluation = dict(interval=100, metric='mAP')
 
 # optimizer
 optimizer = dict(
@@ -177,9 +178,16 @@ optimizer = dict(
     paramwise_cfg=dict(
         custom_keys={'backbone': dict(lr_mult=0.1, decay_mult=1.0)}))
 optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
+
 # learning policy
-lr_config = dict(policy='step', step=[100])
-runner = dict(type='EpochBasedRunner', max_epochs=150)
+"""
+ Args:
+    step (int | list[int]): Step to decay the LR. If an int value is given,
+    regard it as the decay interval. If a list is given, decay LR at
+    these steps.
+"""
+lr_config = dict(policy='step', step=[150])
+runner = dict(type='EpochBasedRunner', max_epochs=600)
 
 # setting runtime
 checkpoint_config = dict(interval=1)  # -1 means never
@@ -198,4 +206,5 @@ log_level = 'INFO'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]
+resume_from = './work_dirs/qpic_r50_150e_hico/latest.pth'
 # load_from = './checkpoints/detr_r50_8x2_150e_coco_20201130_194835-2c4b8974.pth'

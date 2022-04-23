@@ -54,6 +54,8 @@ def single_gpu_test(model,
                     show=show,
                     out_file=out_file,
                     score_thr=show_score_thr)
+        # if dataset_name == 'HICODet':
+        #     result = hoi2result()
 
         results.extend(result)
 
@@ -80,13 +82,12 @@ def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
             batch_size = len(result)
             for _ in range(batch_size * world_size):
                 prog_bar.update()
-    print(1)
+
     # collect results from all ranks
     if gpu_collect:
         results = collect_results_gpu(results, len(dataset))
     else:
         results = collect_results_cpu(results, len(dataset), tmpdir)
-
     return results
 
 
