@@ -45,4 +45,4 @@ tools/dist_train.sh configs/qpic/qpic_r50_150e_hico.py 4  # distributed training
 
 ## Contribuation
 
-Any form help will be welcomed. Feel free to post an issue or PR to contribute to this codebase.
+Any form help will be welcomed. Feel free to post an issue or PR to contribute to this codebase :)
