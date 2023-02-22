@@ -1,5 +1,7 @@
 # Compact and Accurate Features for Efficient Human-Object Interaction Detection 
 
+![img.png](resources/teaser.jpg)
+
 ## Install
 ```shell
 conda create -n dcnet python=3.8 -y

@@ -15,7 +15,7 @@ model = dict(
         style='pytorch',
         init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50')),
     bbox_head=dict(
-        type='DETRHead',
+        type='DETRExtractor',
         num_classes=80,
         in_channels=2048,
         transformer=dict(

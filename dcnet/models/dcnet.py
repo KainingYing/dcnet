@@ -16,9 +16,9 @@ class DCNet(BaseDetector):
 
     def __init__(self,
                  backbone,
-                 neck,
-                 bbox_head,  # use for detect instances
-                 hoi_head,
+                 neck=None,
+                 bbox_head=None,  # use for detect instances
+                 hoi_head=None,
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None,
@@ -30,7 +30,8 @@ class DCNet(BaseDetector):
             backbone.pretrained = pretrained
         self.backbone = build_backbone(backbone)
 
-        self.neck = build_neck(neck)
+        if neck is not None:
+            self.neck = build_neck(neck)
         self.bbox_head = build_head(bbox_head)
 
         # if self.
@@ -67,7 +68,8 @@ class DCNet(BaseDetector):
 
         losses_detr, embeds, memory = self.bbox_head.forward_train(x, img_metas, gt_bboxes, gt_labels, **kwargs)
 
-        # losses_hoi = self.hoi_head.forward_train()
+        embeds, memory = embeds[0], memory[0]
+        losses_hoi = self.hoi_head.forward_train(embeds, memory, gt_)
 
         losses.update(losses_detr)
 

@@ -168,7 +168,7 @@ data = dict(
         img_prefix=data_root + 'images/test2015/',
         valid_hois_file=data_root + 'annotations/corre_hico.npy',
         pipeline=test_pipeline,
-        mode='test'))  # todo：最好在外部也可以引入进行设置
+        mode='test'))  
 
 evaluation = dict(interval=100, metric='mAP')
 

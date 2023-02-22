@@ -9,12 +9,12 @@ from mmcv.runner import force_fp32
 from mmdet.core import (bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh, build_assigner, build_sampler, multi_apply, reduce_mean)
 from mmdet.models.utils import build_transformer
 
-from ..builder import HEADS, build_loss
-from .anchor_free_head import AnchorFreeHead
+from mmdet.models.builder import HEADS, build_loss
+from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
 
 
 @HEADS.register_module()
-class DETRHead(AnchorFreeHead):
+class DETRExtractor(AnchorFreeHead):
     """Implements the DETR transformer head.
 
     See `paper: End-to-End Object Detection with Transformers
@@ -84,7 +84,7 @@ class DETRHead(AnchorFreeHead):
         self.bg_cls_weight = 0
         self.sync_cls_avg_factor = sync_cls_avg_factor
         class_weight = loss_cls.get('class_weight', None)
-        if class_weight is not None and (self.__class__ is DETRHead):
+        if class_weight is not None and (self.__class__ is DETRExtractor):
             assert isinstance(class_weight, float), 'Expected ' \
                 'class_weight to have type float. Found ' \
                 f'{type(class_weight)}.'
@@ -178,7 +178,7 @@ class DETRHead(AnchorFreeHead):
 
         # Names of some parameters in has been changed.
         version = local_metadata.get('version', None)
-        if (version is None or version < 2) and self.__class__ is DETRHead:
+        if (version is None or version < 2) and self.__class__ is DETRExtractor:
             convert_dict = {
                 '.self_attn.': '.attentions.0.',
                 '.ffn.': '.ffns.0.',
@@ -255,13 +255,12 @@ class DETRHead(AnchorFreeHead):
         # position encoding
         pos_embed = self.positional_encoding(masks)  # [bs, embed_dim, h, w]
         # outs_dec: [nb_dec, bs, num_query, embed_dim]
-        outs_dec, _ = self.transformer(x, masks, self.query_embedding.weight,
-                                       pos_embed)
+        outs_dec, memory = self.transformer(x, masks, self.query_embedding.weight, pos_embed)
 
         all_cls_scores = self.fc_cls(outs_dec)
         all_bbox_preds = self.fc_reg(self.activate(
             self.reg_ffn(outs_dec))).sigmoid()
-        return all_cls_scores, all_bbox_preds
+        return all_cls_scores, all_bbox_preds, outs_dec, memory
 
     @force_fp32(apply_to=('all_cls_scores_list', 'all_bbox_preds_list'))
     def loss(self,
@@ -271,30 +270,6 @@ class DETRHead(AnchorFreeHead):
              gt_labels_list,
              img_metas,
              gt_bboxes_ignore=None):
-        """"Loss function.
-
-        Only outputs from the last feature level are used for computing
-        losses by default.
-
-        Args:
-            all_cls_scores_list (list[Tensor]): Classification outputs
-                for each feature level. Each is a 4D-tensor with shape
-                [nb_dec, bs, num_query, cls_out_channels].
-            all_bbox_preds_list (list[Tensor]): Sigmoid regression
-                outputs for each feature level. Each is a 4D-tensor with
-                normalized coordinate format (cx, cy, w, h) and shape
-                [nb_dec, bs, num_query, 4].
-            gt_bboxes_list (list[Tensor]): Ground truth bboxes for each image
-                with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels_list (list[Tensor]): Ground truth class indices for each
-                image with shape (num_gts, ).
-            img_metas (list[dict]): List of image meta information.
-            gt_bboxes_ignore (list[Tensor], optional): Bounding boxes
-                which can be ignored for each image. Default None.
-
-        Returns:
-            dict[str, Tensor]: A dictionary of loss components.
-        """
         # NOTE defaultly only the outputs from the last feature scale is used.
         all_cls_scores = all_cls_scores_list[-1]
         all_bbox_preds = all_bbox_preds_list[-1]
@@ -337,27 +312,6 @@ class DETRHead(AnchorFreeHead):
                     gt_labels_list,
                     img_metas,
                     gt_bboxes_ignore_list=None):
-        """"Loss function for outputs from a single decoder layer of a single
-        feature level.
-
-        Args:
-            cls_scores (Tensor): Box score logits from a single decoder layer
-                for all images. Shape [bs, num_query, cls_out_channels].
-            bbox_preds (Tensor): Sigmoid outputs from a single decoder layer
-                for all images, with normalized coordinate (cx, cy, w, h) and
-                shape [bs, num_query, 4].
-            gt_bboxes_list (list[Tensor]): Ground truth bboxes for each image
-                with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels_list (list[Tensor]): Ground truth class indices for each
-                image with shape (num_gts, ).
-            img_metas (list[dict]): List of image meta information.
-            gt_bboxes_ignore_list (list[Tensor], optional): Bounding
-                boxes which can be ignored for each image. Default None.
-
-        Returns:
-            dict[str, Tensor]: A dictionary of loss components for outputs from
-                a single decoder layer.
-        """
         num_imgs = cls_scores.size(0)
         cls_scores_list = [cls_scores[i] for i in range(num_imgs)]
         bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]
@@ -422,40 +376,6 @@ class DETRHead(AnchorFreeHead):
                     gt_labels_list,
                     img_metas,
                     gt_bboxes_ignore_list=None):
-        """"Compute regression and classification targets for a batch image.
-
-        Outputs from a single decoder layer of a single feature level are used.
-
-        Args:
-            cls_scores_list (list[Tensor]): Box score logits from a single
-                decoder layer for each image with shape [num_query,
-                cls_out_channels].
-            bbox_preds_list (list[Tensor]): Sigmoid outputs from a single
-                decoder layer for each image, with normalized coordinate
-                (cx, cy, w, h) and shape [num_query, 4].
-            gt_bboxes_list (list[Tensor]): Ground truth bboxes for each image
-                with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels_list (list[Tensor]): Ground truth class indices for each
-                image with shape (num_gts, ).
-            img_metas (list[dict]): List of image meta information.
-            gt_bboxes_ignore_list (list[Tensor], optional): Bounding
-                boxes which can be ignored for each image. Default None.
-
-        Returns:
-            tuple: a tuple containing the following targets.
-
-                - labels_list (list[Tensor]): Labels for all images.
-                - label_weights_list (list[Tensor]): Label weights for all \
-                    images.
-                - bbox_targets_list (list[Tensor]): BBox targets for all \
-                    images.
-                - bbox_weights_list (list[Tensor]): BBox weights for all \
-                    images.
-                - num_total_pos (int): Number of positive samples in all \
-                    images.
-                - num_total_neg (int): Number of negative samples in all \
-                    images.
-        """
         assert gt_bboxes_ignore_list is None, \
             'Only supports for gt_bboxes_ignore setting to None.'
         num_imgs = len(cls_scores_list)
@@ -479,35 +399,6 @@ class DETRHead(AnchorFreeHead):
                            gt_labels,
                            img_meta,
                            gt_bboxes_ignore=None):
-        """"Compute regression and classification targets for one image.
-
-        Outputs from a single decoder layer of a single feature level are used.
-
-        Args:
-            cls_score (Tensor): Box score logits from a single decoder layer
-                for one image. Shape [num_query, cls_out_channels].
-            bbox_pred (Tensor): Sigmoid outputs from a single decoder layer
-                for one image, with normalized coordinate (cx, cy, w, h) and
-                shape [num_query, 4].
-            gt_bboxes (Tensor): Ground truth bboxes for one image with
-                shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels (Tensor): Ground truth class indices for one image
-                with shape (num_gts, ).
-            img_meta (dict): Meta information for one image.
-            gt_bboxes_ignore (Tensor, optional): Bounding boxes
-                which can be ignored. Default None.
-
-        Returns:
-            tuple[Tensor]: a tuple containing the following for one image.
-
-                - labels (Tensor): Labels of each image.
-                - label_weights (Tensor]): Label weights of each image.
-                - bbox_targets (Tensor): BBox targets of each image.
-                - bbox_weights (Tensor): BBox weights of each image.
-                - pos_inds (Tensor): Sampled positive indices for each image.
-                - neg_inds (Tensor): Sampled negative indices for each image.
-        """
-
         num_bboxes = bbox_pred.size(0)
         # assigner and sampler
         assign_result = self.assigner.assign(bbox_pred, cls_score, gt_bboxes,
@@ -551,32 +442,14 @@ class DETRHead(AnchorFreeHead):
                       gt_bboxes_ignore=None,
                       proposal_cfg=None,
                       **kwargs):
-        """Forward function for training mode.
-
-        Args:
-            x (list[Tensor]): Features from backbone.
-            img_metas (list[dict]): Meta information of each image, e.g.,
-                image size, scaling factor, etc.
-            gt_bboxes (Tensor): Ground truth bboxes of the image,
-                shape (num_gts, 4).
-            gt_labels (Tensor): Ground truth labels of each box,
-                shape (num_gts,).
-            gt_bboxes_ignore (Tensor): Ground truth bboxes to be
-                ignored, shape (num_ignored_gts, 4).
-            proposal_cfg (mmcv.Config): Test / postprocessing configuration,
-                if None, test_cfg would be used.
-
-        Returns:
-            dict[str, Tensor]: A dictionary of loss components.
-        """
         assert proposal_cfg is None, '"proposal_cfg" must be None'
-        outs = self(x, img_metas)
+        all_cls_scores, all_bbox_preds, outs_dec, memory = self(x, img_metas)
         if gt_labels is None:
-            loss_inputs = outs + (gt_bboxes, img_metas)
+            loss_inputs = (all_cls_scores, all_bbox_preds) + (gt_bboxes, img_metas)
         else:
-            loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
+            loss_inputs = (all_cls_scores, all_bbox_preds) + (gt_bboxes, gt_labels, img_metas)
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
-        return losses
+        return losses, outs_dec, memory
 
     @force_fp32(apply_to=('all_cls_scores_list', 'all_bbox_preds_list'))
     def get_bboxes(self,
@@ -584,28 +457,6 @@ class DETRHead(AnchorFreeHead):
                    all_bbox_preds_list,
                    img_metas,
                    rescale=False):
-        """Transform network outputs for a batch into bbox predictions.
-
-        Args:
-            all_cls_scores_list (list[Tensor]): Classification outputs
-                for each feature level. Each is a 4D-tensor with shape
-                [nb_dec, bs, num_query, cls_out_channels].
-            all_bbox_preds_list (list[Tensor]): Sigmoid regression
-                outputs for each feature level. Each is a 4D-tensor with
-                normalized coordinate format (cx, cy, w, h) and shape
-                [nb_dec, bs, num_query, 4].
-            img_metas (list[dict]): Meta information of each image.
-            rescale (bool, optional): If True, return boxes in original
-                image space. Default False.
-
-        Returns:
-            list[list[Tensor, Tensor]]: Each item in result_list is 2-tuple. \
-                The first item is an (n, 5) tensor, where the first 4 columns \
-                are bounding box positions (tl_x, tl_y, br_x, br_y) and the \
-                5-th column is a score between 0 and 1. The second item is a \
-                (n,) tensor where each item is the predicted class label of \
-                the corresponding box.
-        """
         # NOTE defaultly only using outputs from the last feature level,
         # and only the outputs from the last decoder layer is used.
         cls_scores = all_cls_scores_list[-1][-1]
@@ -630,31 +481,6 @@ class DETRHead(AnchorFreeHead):
                            img_shape,
                            scale_factor,
                            rescale=False):
-        """Transform outputs from the last decoder layer into bbox predictions
-        for each image.
-
-        Args:
-            cls_score (Tensor): Box score logits from the last decoder layer
-                for each image. Shape [num_query, cls_out_channels].
-            bbox_pred (Tensor): Sigmoid outputs from the last decoder layer
-                for each image, with coordinate format (cx, cy, w, h) and
-                shape [num_query, 4].
-            img_shape (tuple[int]): Shape of input image, (height, width, 3).
-            scale_factor (ndarray, optional): Scale factor of the image arange
-                as (w_scale, h_scale, w_scale, h_scale).
-            rescale (bool, optional): If True, return boxes in original image
-                space. Default False.
-
-        Returns:
-            tuple[Tensor]: Results of detected bboxes and labels.
-
-                - det_bboxes: Predicted bboxes with shape [num_query, 5], \
-                    where the first 4 columns are bounding box positions \
-                    (tl_x, tl_y, br_x, br_y) and the 5-th column are scores \
-                    between 0 and 1.
-                - det_labels: Predicted labels of the corresponding box with \
-                    shape [num_query].
-        """
         assert len(cls_score) == len(bbox_pred)
         max_per_img = self.test_cfg.get('max_per_img', self.num_query)
         # exclude background
@@ -682,162 +508,7 @@ class DETRHead(AnchorFreeHead):
         return det_bboxes, det_labels
 
     def simple_test_bboxes(self, feats, img_metas, rescale=False):
-        """Test det bboxes without test-time augmentation.
-
-        Args:
-            feats (tuple[torch.Tensor]): Multi-level features from the
-                upstream network, each is a 4D-tensor.
-            img_metas (list[dict]): List of image information.
-            rescale (bool, optional): Whether to rescale the results.
-                Defaults to False.
-
-        Returns:
-            list[tuple[Tensor, Tensor]]: Each item in result_list is 2-tuple.
-                The first item is ``bboxes`` with shape (n, 5),
-                where 5 represent (tl_x, tl_y, br_x, br_y, score).
-                The shape of the second tensor in the tuple is ``labels``
-                with shape (n,)
-        """
         # forward of this head requires img_metas
         outs = self.forward(feats, img_metas)
         results_list = self.get_bboxes(*outs, img_metas, rescale=rescale)
         return results_list
-
-    def forward_onnx(self, feats, img_metas):
-        """Forward function for exporting to ONNX.
-
-        Over-write `forward` because: `masks` is directly created with
-        zero (valid position tag) and has the same spatial size as `x`.
-        Thus the construction of `masks` is different from that in `forward`.
-
-        Args:
-            feats (tuple[Tensor]): Features from the upstream network, each is
-                a 4D-tensor.
-            img_metas (list[dict]): List of image information.
-
-        Returns:
-            tuple[list[Tensor], list[Tensor]]: Outputs for all scale levels.
-
-                - all_cls_scores_list (list[Tensor]): Classification scores \
-                    for each scale level. Each is a 4D-tensor with shape \
-                    [nb_dec, bs, num_query, cls_out_channels]. Note \
-                    `cls_out_channels` should includes background.
-                - all_bbox_preds_list (list[Tensor]): Sigmoid regression \
-                    outputs for each scale level. Each is a 4D-tensor with \
-                    normalized coordinate format (cx, cy, w, h) and shape \
-                    [nb_dec, bs, num_query, 4].
-        """
-        num_levels = len(feats)
-        img_metas_list = [img_metas for _ in range(num_levels)]
-        return multi_apply(self.forward_single_onnx, feats, img_metas_list)
-
-    def forward_single_onnx(self, x, img_metas):
-        """"Forward function for a single feature level with ONNX exportation.
-
-        Args:
-            x (Tensor): Input feature from backbone's single stage, shape
-                [bs, c, h, w].
-            img_metas (list[dict]): List of image information.
-
-        Returns:
-            all_cls_scores (Tensor): Outputs from the classification head,
-                shape [nb_dec, bs, num_query, cls_out_channels]. Note
-                cls_out_channels should includes background.
-            all_bbox_preds (Tensor): Sigmoid outputs from the regression
-                head with normalized coordinate format (cx, cy, w, h).
-                Shape [nb_dec, bs, num_query, 4].
-        """
-        # Note `img_shape` is not dynamically traceable to ONNX,
-        # since the related augmentation was done with numpy under
-        # CPU. Thus `masks` is directly created with zeros (valid tag)
-        # and the same spatial shape as `x`.
-        # The difference between torch and exported ONNX model may be
-        # ignored, since the same performance is achieved (e.g.
-        # 40.1 vs 40.1 for DETR)
-        batch_size = x.size(0)
-        h, w = x.size()[-2:]
-        masks = x.new_zeros((batch_size, h, w))  # [B,h,w]
-
-        x = self.input_proj(x)
-        # interpolate masks to have the same spatial shape with x
-        masks = F.interpolate(
-            masks.unsqueeze(1), size=x.shape[-2:]).to(torch.bool).squeeze(1)
-        pos_embed = self.positional_encoding(masks)
-        outs_dec, _ = self.transformer(x, masks, self.query_embedding.weight,
-                                       pos_embed)
-
-        all_cls_scores = self.fc_cls(outs_dec)
-        all_bbox_preds = self.fc_reg(self.activate(
-            self.reg_ffn(outs_dec))).sigmoid()
-        return all_cls_scores, all_bbox_preds
-
-    def onnx_export(self, all_cls_scores_list, all_bbox_preds_list, img_metas):
-        """Transform network outputs into bbox predictions, with ONNX
-        exportation.
-
-        Args:
-            all_cls_scores_list (list[Tensor]): Classification outputs
-                for each feature level. Each is a 4D-tensor with shape
-                [nb_dec, bs, num_query, cls_out_channels].
-            all_bbox_preds_list (list[Tensor]): Sigmoid regression
-                outputs for each feature level. Each is a 4D-tensor with
-                normalized coordinate format (cx, cy, w, h) and shape
-                [nb_dec, bs, num_query, 4].
-            img_metas (list[dict]): Meta information of each image.
-
-        Returns:
-            tuple[Tensor, Tensor]: dets of shape [N, num_det, 5]
-                and class labels of shape [N, num_det].
-        """
-        assert len(img_metas) == 1, \
-            'Only support one input image while in exporting to ONNX'
-
-        cls_scores = all_cls_scores_list[-1][-1]
-        bbox_preds = all_bbox_preds_list[-1][-1]
-
-        # Note `img_shape` is not dynamically traceable to ONNX,
-        # here `img_shape_for_onnx` (padded shape of image tensor)
-        # is used.
-        img_shape = img_metas[0]['img_shape_for_onnx']
-        max_per_img = self.test_cfg.get('max_per_img', self.num_query)
-        batch_size = cls_scores.size(0)
-        # `batch_index_offset` is used for the gather of concatenated tensor
-        batch_index_offset = torch.arange(batch_size).to(
-            cls_scores.device) * max_per_img
-        batch_index_offset = batch_index_offset.unsqueeze(1).expand(
-            batch_size, max_per_img)
-
-        # supports dynamical batch inference
-        if self.loss_cls.use_sigmoid:
-            cls_scores = cls_scores.sigmoid()
-            scores, indexes = cls_scores.view(batch_size, -1).topk(
-                max_per_img, dim=1)
-            det_labels = indexes % self.num_classes
-            bbox_index = indexes // self.num_classes
-            bbox_index = (bbox_index + batch_index_offset).view(-1)
-            bbox_preds = bbox_preds.view(-1, 4)[bbox_index]
-            bbox_preds = bbox_preds.view(batch_size, -1, 4)
-        else:
-            scores, det_labels = F.softmax(
-                cls_scores, dim=-1)[..., :-1].max(-1)
-            scores, bbox_index = scores.topk(max_per_img, dim=1)
-            bbox_index = (bbox_index + batch_index_offset).view(-1)
-            bbox_preds = bbox_preds.view(-1, 4)[bbox_index]
-            det_labels = det_labels.view(-1)[bbox_index]
-            bbox_preds = bbox_preds.view(batch_size, -1, 4)
-            det_labels = det_labels.view(batch_size, -1)
-
-        det_bboxes = bbox_cxcywh_to_xyxy(bbox_preds)
-        # use `img_shape_tensor` for dynamically exporting to ONNX
-        img_shape_tensor = img_shape.flip(0).repeat(2)  # [w,h,w,h]
-        img_shape_tensor = img_shape_tensor.unsqueeze(0).unsqueeze(0).expand(
-            batch_size, det_bboxes.size(1), 4)
-        det_bboxes = det_bboxes * img_shape_tensor
-        # dynamically clip bboxes
-        x1, y1, x2, y2 = det_bboxes.split((1, 1, 1, 1), dim=-1)
-        from mmdet.core.export import dynamic_clip_for_onnx
-        x1, y1, x2, y2 = dynamic_clip_for_onnx(x1, y1, x2, y2, img_shape)
-        det_bboxes = torch.cat([x1, y1, x2, y2], dim=-1)
-        det_bboxes = torch.cat((det_bboxes, scores.unsqueeze(-1)), -1)
-
-        return det_bboxes, det_labels

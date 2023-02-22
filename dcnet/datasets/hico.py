@@ -1,6 +1,5 @@
 import time
 import warnings
-import os
 from pathlib import Path
 from collections import defaultdict
 
@@ -456,7 +455,7 @@ class HICODet(Dataset):
                     max_gt_hoi = 0
                     for gt_hoi in gt_hois:
                         if gt_hoi['subject_id'] in pred_sub_ids and gt_hoi['object_id'] in pred_obj_ids \
-                           and pred_category_id == gt_hoi['category_id']:
+                                and pred_category_id == gt_hoi['category_id']:
                             is_match = 1
                             min_overlap_gt = min(pred_sub_overlaps[pred_sub_ids.index(gt_hoi['subject_id'])],
                                                  pred_obj_overlaps[pred_obj_ids.index(gt_hoi['object_id'])])
@@ -470,7 +469,7 @@ class HICODet(Dataset):
                 if is_match == 1 and vis_tag[gt_hois.index(max_gt_hoi)] == 0:
                     self.fp[triplet].append(0)
                     self.tp[triplet].append(1)
-                    vis_tag[gt_hois.index(max_gt_hoi)] =1
+                    vis_tag[gt_hois.index(max_gt_hoi)] = 1
                 else:
                     self.fp[triplet].append(1)
                     self.tp[triplet].append(0)

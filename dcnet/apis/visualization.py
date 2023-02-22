@@ -183,7 +183,7 @@ def imshow_det_interactions(img,
         # visualize the interactions here.
         # inteaction label names
         inter_label = np.where(verb_label > 0)[0]
-        inter_label_text = ('/').join(list(map(lambda x: verb_names[x], inter_label)))
+        inter_label_text = '/'.join(list(map(lambda x: verb_names[x], inter_label)))
         sub_center_x, sub_center_y = (sub_bbox_int[0] + sub_bbox_int[2]) / 2, (sub_bbox_int[1] + sub_bbox_int[3]) / 2
         obj_center_x, obj_center_y = (obj_bbox_int[0] + obj_bbox_int[2]) / 2, (obj_bbox_int[1] + obj_bbox_int[3]) / 2
         # step 1:visualize the line

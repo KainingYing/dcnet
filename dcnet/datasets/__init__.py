@@ -1,1 +1,1 @@
-from .hico_det import HICODet
+from .hico import HICODet
