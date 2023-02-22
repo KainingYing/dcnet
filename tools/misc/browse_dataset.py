@@ -7,12 +7,13 @@ from pathlib import Path
 import mmcv
 from mmcv import Config, DictAction
 
-from mmhoidet.core.visualization import imshow_det_interactions
-from mmhoidet.datasets.builder import build_dataset
+from mmdet.datasets.builder import build_dataset
+
+from dcnet.apis.visualization import imshow_det_interactions
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Browse a dataset')
+    parser = argparse.ArgumentParser(description='Browse HICO dataset')
     parser.add_argument('config', help='train config file path')
     parser.add_argument(
         '--skip-type',
@@ -59,8 +60,7 @@ def retrieve_data_cfg(config_path, skip_type, cfg_options):
         from mmcv.utils import import_modules_from_strings
         import_modules_from_strings(**cfg['custom_imports'])
     train_data_cfg = cfg.data.train
-    while 'dataset' in train_data_cfg and train_data_cfg[
-        'type'] != 'MultiImageMixDataset':
+    while 'dataset' in train_data_cfg and train_data_cfg['type'] != 'MultiImageMixDataset':
         train_data_cfg = train_data_cfg['dataset']
 
     if isinstance(train_data_cfg, Sequence):
